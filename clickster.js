@@ -1,102 +1,152 @@
-const isChrome = !window['browser'] && !!chrome;
+const isChrome = !window["browser"] && !!chrome;
 // Prefer the more standard `browser` before Chrome API
-const browser = isChrome ? chrome : window['browser'];
+const browser = isChrome ? chrome : window["browser"];
 
 let isSelectionModeEnabled = false;
 let clickInterval = 3000;
-let clickerId, timeLastClicked, lastHoveredElement, lastSelectedElement, lastTooltip, lastHoveredElementBorder, lastSelectedElementBorder, shouldNextClickSelectAnElement, selectedElementToClick;
+let clickerId,
+  timeLastClicked,
+  lastHoveredElement,
+  lastSelectedElement,
+  lastHoveredElementBorder,
+  lastSelectedElementBorder,
+  shouldNextClickSelectAnElement,
+  selectedElementToClick;
 
-function removeHighlight() {
-  if (lastHoveredElement) {
-    lastHoveredElement.style.border = lastHoveredElementBorder;
-    if (lastTooltip) {
-      lastTooltip.remove();
-    }
+function removeHoverHighlight(element) {
+  if (element) {
+    element.style.border = lastHoveredElementBorder;
   }
 }
 
-document.addEventListener('mousemove', event => {
+let clientX, clientY;
+
+document.addEventListener("mousemove", (event) => {
+  clientX = event.clientX;
+  clientY = event.clientY;
+
   if (isSelectionModeEnabled) {
-
-    removeHighlight();
-
-    const { clientX, clientY } = event;
     const elementMouseIsOver = document.elementFromPoint(clientX, clientY);
 
-    if (elementMouseIsOver !== document.body) {
-      if (lastHoveredElement !== elementMouseIsOver) {
-        shouldNextClickSelectAnElement = true;
-      }
-  
+    if (
+      elementMouseIsOver !== document.body &&
+      lastHoveredElement !== elementMouseIsOver
+    ) {
+      removeHoverHighlight(lastHoveredElement);
+
+      shouldNextClickSelectAnElement = true;
+
       lastHoveredElementBorder = elementMouseIsOver.style.border;
       elementMouseIsOver.style.border = "thin solid red";
-  
-      lastTooltip = document.createElement('div');
-      lastTooltip.classList.add('clickster-tooltip');
-      lastTooltip.innerHTML = '<span class="clickster-tooltip--text">Set target</span>';
-      elementMouseIsOver.appendChild(lastTooltip);
     }
 
     lastHoveredElement = elementMouseIsOver;
   }
 });
 
-document.addEventListener('click', event => {
+function displayAsSelected(element) {
+  selectedElementToClick.style.border = "thick solid green";
+}
+
+function clickElement() {
+  selectedElementToClick.click();
+  selectedElementToClick.style.border = "thick solid silver";
+  setTimeout(() => displayAsSelected(selectedElementToClick), 500);
+  timeLastClicked = new Date();
+}
+
+function displayElementAsSelected(element) {
+  lastSelectedElementBorder = element.style.border;
+  displayAsSelected(element);
+}
+
+function removeSelectedHighlight(element) {
+  element.style.border = lastSelectedElementBorder;
+}
+
+function setSelectedElement(event) {
   if (shouldNextClickSelectAnElement) {
     event.preventDefault();
 
+    removeHoverHighlight(lastHoveredElement);
     if (lastSelectedElement) {
-      lastSelectedElement.style.border = lastSelectedElementBorder;
+      removeSelectedHighlight(lastSelectedElement);
     }
 
-    const { clientX, clientY } = event;
     selectedElementToClick = document.elementFromPoint(clientX, clientY);
-    removeHighlight();
-    lastSelectedElementBorder = selectedElementToClick.style.border;
-    selectedElementToClick.style.border = "thick solid green";
+    displayElementAsSelected(selectedElementToClick);
 
     timeLastClicked = new Date();
-    clickerId = setInterval(() => {
-      selectedElementToClick.click();
-      timeLastClicked = new Date();
-    }, clickInterval);
+    clickerId = setInterval(clickElement, clickInterval);
 
     isSelectionModeEnabled = false;
     shouldNextClickSelectAnElement = false;
     lastSelectedElement = selectedElementToClick;
   }
-});
+}
 
-browser.runtime.onMessage.addListener((message) => {
-  if (message === 'SELECT_ELEMENT_CLICKED') {
-    isSelectionModeEnabled = true;
-    selectedElementToClick = null;
-    clearInterval(clickerId);
+document.addEventListener("keyup", (event) => {
+  if (event.key === "Enter") {
+    setSelectedElement(event);
   }
 });
+document.addEventListener("click", (event) => {
+  setSelectedElement(event);
+});
+
+function sendTimeUntilClickResponse() {
+  const now = new Date();
+  const safeTimeLastClicked = !!timeLastClicked ? timeLastClicked : now;
+  const timeSinceLastClick = now.getTime() - safeTimeLastClicked.getTime();
+  const intervalDiff = clickInterval - timeSinceLastClick;
+  browser.runtime.sendMessage({
+    timeUntilClick: intervalDiff <= 0 ? clickInterval : intervalDiff,
+  });
+}
+
+function sendIsElementSelectedResponse() {
+  browser.runtime.sendMessage(
+    !!selectedElementToClick ? "ELEMENT_IS_SELECTED" : "NO_ELEMENT_IS_SELECTED"
+  );
+}
+
+function sendClickIntervalResponse() {
+  browser.runtime.sendMessage({
+    clickInterval: Math.floor(clickInterval / 1000),
+  });
+}
+
+function updateClickInterval(newClickInterval) {
+  clickInterval = newClickInterval * 1000;
+  clearInterval(clickerId);
+  clickerId = setInterval(clickElement, clickInterval);
+}
+
+function enableSelectionMode() {
+  isSelectionModeEnabled = true;
+  selectedElementToClick = null;
+  clearInterval(clickerId);
+}
+
+function manuallyClearSelectedElement() {
+  clearInterval(clickerId);
+  timeLastClicked = null;
+  selectedElementToClick.style.border = lastSelectedElementBorder;
+  selectedElementToClick = null;
+}
 
 browser.runtime.onMessage.addListener(function (message) {
   if (message === "GET_TIME_UNTIL_CLICK") {
-      const now = new Date();
-      const safeTimeLastClicked = !!timeLastClicked ? timeLastClicked : now;
-      const timeSinceLastClick = now.getTime() - safeTimeLastClicked.getTime();
-      const intervalDiff = clickInterval - timeSinceLastClick;
-      browser.runtime.sendMessage({ timeUntilClick: intervalDiff <= 0 ? clickInterval : intervalDiff });
+    sendTimeUntilClickResponse();
   } else if (message === "IS_ELEMENT_SELECTED") {
-    browser.runtime.sendMessage(!!selectedElementToClick ? "ELEMENT_IS_SELECTED" : "NO_ELEMENT_IS_SELECTED");
+    sendIsElementSelectedResponse();
   } else if (message === "GET_CLICK_INTERVAL") {
-    browser.runtime.sendMessage({ clickInterval: Math.floor(clickInterval / 1000) });
+    sendClickIntervalResponse();
   } else if (message.newClickInterval) {
-    clickInterval = (message.newClickInterval * 1000);
-    clearInterval(clickerId);
-    clickerId = setInterval(() => {
-      selectedElementToClick.click();
-      timeLastClicked = new Date();
-    }, clickInterval);
-  } else if (message === 'CLEAR_SELECTED_ELEMENT') {
-    clearInterval(clickerId);
-    timeLastClicked = null;
-    selectedElementToClick.style.border = lastSelectedElementBorder;
-    selectedElementToClick = null;
+    updateClickInterval(message.newClickInterval);
+  } else if (message === "SELECT_ELEMENT_CLICKED") {
+    enableSelectionMode();
+  } else if (message === "CLEAR_SELECTED_ELEMENT") {
+    manuallyClearSelectedElement();
   }
 });

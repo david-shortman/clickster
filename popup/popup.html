@@ -4,28 +4,37 @@
     background-color:  #1A0650;
     font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     color: white;
-    width: 250px;
+    width: 290px;
 }
 </style>
 <div id="content">
     <h2>Clickster settings</h2>
     <hr>
     <div>
-        <h3>Current Element</h3>
+        <h3>Target</h3>
         <div>
-            <p id="no-element-selected-msg">No element selected yet</p>
+            <p id="no-element-selected-msg">No target selected yet</p>
             <div id="element-selected-msg" hidden>
                 <p>The <span style="border:medium solid green">highlighted element</span> will be clicked.</p>
-                <button id="clear-selection-btn">Clear selection</button>    
+                <button id="clear-selection-btn">Remove target</button>    
             </div>
         </div>
         <div style="margin-top:5px">
-            <button id="select-element-btn">Select an element</button>
+            <button id="select-element-btn">Select a target</button>
+            <br />
+            <br />
+            <strong>To select disabled buttons:</strong>
+            <br />
+            While hovering over the button, press Enter.
+            <br />
+            <strong>To select all other elements:</strong>
+            <br />
+            While hovering over the element, click the element.
         </div>
     </div>
     <div>
         <h3>Frequency</h3>
-        <p>Every <input id="click-interval-fld" style="width:40px" /> second(s)</p>
+        <p>Click target every <input id="click-interval-fld" style="width:40px" /> second(s)</p>
         <p>Seconds until next click: <span id="time-until-click-lbl">-</span></p>
     </div>
 </div>

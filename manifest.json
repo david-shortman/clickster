@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Clickster",
-  "version": "0.0.1",
+  "version": "1.0",
   "description": "Select an element to be automatically clicked at a determined interval.",
   "icons": {
     "48": "icons/48.png",
@@ -15,10 +15,6 @@
       ],
       "js": [
         "clickster.js"
-      ],
-      "css": [
-        "popup/tooltip.css",
-        "popup/popup.css"
       ]
     }
   ],
