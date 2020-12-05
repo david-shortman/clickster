@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Clickster",
-  "version": "1.0",
+  "version": "1.0.1",
   "description": "Select an element to be automatically clicked at a determined interval.",
   "icons": {
     "48": "icons/48.png",
@@ -24,7 +24,6 @@
     "default_popup": "popup/popup.html"
   },
   "permissions": [
-    "<all_urls>",
-    "activeTab"
+    "<all_urls>"
   ]
 }
