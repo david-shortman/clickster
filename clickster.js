@@ -13,21 +13,26 @@ let clickerId,
   shouldNextClickSelectAnElement,
   selectedElementToClick;
 
+const elementsThatWereDisabledOnPageLoad = document.body.querySelectorAll(
+  "*:disabled"
+);
+
+let clientX, clientY, lastX, lastY;
+
 function removeHoverHighlight(element) {
   if (element) {
     element.style.border = lastHoveredElementBorder;
   }
 }
 
-let clientX, clientY;
-
 document.addEventListener("mousemove", (event) => {
+  lastX = clientX;
+  lastY = clientY;
   clientX = event.clientX;
   clientY = event.clientY;
 
   if (isSelectionModeEnabled) {
     const elementMouseIsOver = document.elementFromPoint(clientX, clientY);
-
     if (
       elementMouseIsOver !== document.body &&
       lastHoveredElement !== elementMouseIsOver
@@ -45,7 +50,10 @@ document.addEventListener("mousemove", (event) => {
 });
 
 function displayAsSelected(element) {
-  selectedElementToClick.style.border = "thick solid green";
+  selectedElementToClick.style.border = "thick solid";
+  selectedElementToClick.style["border-image"] =
+    "linear-gradient(to bottom right, #b827fc 0%, #2c90fc 25%, #b8fd33 50%, #fec837 75%, #fd1892 100%)";
+  selectedElementToClick.style["border-image-slice"] = 1;
 }
 
 function clickElement() {
@@ -67,6 +75,10 @@ function removeSelectedHighlight(element) {
 function setSelectedElement(event) {
   if (shouldNextClickSelectAnElement) {
     event.preventDefault();
+
+    elementsThatWereDisabledOnPageLoad.forEach((elem) => {
+      elem.disabled = true;
+    });
 
     removeHoverHighlight(lastHoveredElement);
     if (lastSelectedElement) {
@@ -126,6 +138,10 @@ function enableSelectionMode() {
   isSelectionModeEnabled = true;
   selectedElementToClick = null;
   clearInterval(clickerId);
+
+  elementsThatWereDisabledOnPageLoad.forEach((elem) => {
+    elem.disabled = false;
+  });
 }
 
 function manuallyClearSelectedElement() {

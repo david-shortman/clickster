@@ -1,0 +1,556 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 50;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		E6DA8C12257C381A0019FCFB /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DA8C11257C381A0019FCFB /* AppDelegate.swift */; };
+		E6DA8C15257C381A0019FCFB /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C13257C381A0019FCFB /* Main.storyboard */; };
+		E6DA8C17257C381A0019FCFB /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DA8C16257C381A0019FCFB /* ViewController.swift */; };
+		E6DA8C19257C381B0019FCFB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C18257C381B0019FCFB /* Assets.xcassets */; };
+		E6DA8C20257C381B0019FCFB /* Clickster Extension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E6DA8C1F257C381B0019FCFB /* Clickster Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E6DA8C25257C381B0019FCFB /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E6DA8C24257C381B0019FCFB /* Cocoa.framework */; };
+		E6DA8C28257C381B0019FCFB /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DA8C27257C381B0019FCFB /* SafariWebExtensionHandler.swift */; };
+		E6DA8C40257C381B0019FCFB /* popup in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C35257C381B0019FCFB /* popup */; };
+		E6DA8C41257C381B0019FCFB /* PRIVACY_POLICY.md in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C36257C381B0019FCFB /* PRIVACY_POLICY.md */; };
+		E6DA8C42257C381B0019FCFB /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C37257C381B0019FCFB /* LICENSE */; };
+		E6DA8C43257C381B0019FCFB /* Clickster in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C38257C381B0019FCFB /* Clickster */; };
+		E6DA8C44257C381B0019FCFB /* example.gif in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C39257C381B0019FCFB /* example.gif */; };
+		E6DA8C45257C381B0019FCFB /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C3A257C381B0019FCFB /* README.md */; };
+		E6DA8C46257C381B0019FCFB /* icons in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C3B257C381B0019FCFB /* icons */; };
+		E6DA8C47257C381B0019FCFB /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C3C257C381B0019FCFB /* manifest.json */; };
+		E6DA8C48257C381B0019FCFB /* promo_2.png in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C3D257C381B0019FCFB /* promo_2.png */; };
+		E6DA8C49257C381B0019FCFB /* clickster.js in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C3E257C381B0019FCFB /* clickster.js */; };
+		E6DA8C4A257C381B0019FCFB /* promo_1.png in Resources */ = {isa = PBXBuildFile; fileRef = E6DA8C3F257C381B0019FCFB /* promo_1.png */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E6DA8C21257C381B0019FCFB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E6DA8C05257C381A0019FCFB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E6DA8C1E257C381B0019FCFB;
+			remoteInfo = "Clickster Extension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E6DA8C30257C381B0019FCFB /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				E6DA8C20257C381B0019FCFB /* Clickster Extension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		E6DA8C0D257C381A0019FCFB /* Clickster.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Clickster.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E6DA8C10257C381A0019FCFB /* Clickster.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Clickster.entitlements; sourceTree = "<group>"; };
+		E6DA8C11257C381A0019FCFB /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		E6DA8C14257C381A0019FCFB /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		E6DA8C16257C381A0019FCFB /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		E6DA8C18257C381B0019FCFB /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E6DA8C1A257C381B0019FCFB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E6DA8C1F257C381B0019FCFB /* Clickster Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Clickster Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E6DA8C24257C381B0019FCFB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
+		E6DA8C27257C381B0019FCFB /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		E6DA8C29257C381B0019FCFB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E6DA8C2A257C381B0019FCFB /* Clickster_Extension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Clickster_Extension.entitlements; sourceTree = "<group>"; };
+		E6DA8C35257C381B0019FCFB /* popup */ = {isa = PBXFileReference; lastKnownFileType = folder; name = popup; path = ../../popup; sourceTree = "<group>"; };
+		E6DA8C36257C381B0019FCFB /* PRIVACY_POLICY.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = PRIVACY_POLICY.md; path = ../../PRIVACY_POLICY.md; sourceTree = "<group>"; };
+		E6DA8C37257C381B0019FCFB /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; name = LICENSE; path = ../../LICENSE; sourceTree = "<group>"; };
+		E6DA8C38257C381B0019FCFB /* Clickster */ = {isa = PBXFileReference; lastKnownFileType = text; path = Clickster; sourceTree = SOURCE_ROOT; };
+		E6DA8C39257C381B0019FCFB /* example.gif */ = {isa = PBXFileReference; lastKnownFileType = image.gif; name = example.gif; path = ../../example.gif; sourceTree = "<group>"; };
+		E6DA8C3A257C381B0019FCFB /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = README.md; path = ../../README.md; sourceTree = "<group>"; };
+		E6DA8C3B257C381B0019FCFB /* icons */ = {isa = PBXFileReference; lastKnownFileType = folder; name = icons; path = ../../icons; sourceTree = "<group>"; };
+		E6DA8C3C257C381B0019FCFB /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = ../../manifest.json; sourceTree = "<group>"; };
+		E6DA8C3D257C381B0019FCFB /* promo_2.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = promo_2.png; path = ../../promo_2.png; sourceTree = "<group>"; };
+		E6DA8C3E257C381B0019FCFB /* clickster.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = clickster.js; path = ../../clickster.js; sourceTree = "<group>"; };
+		E6DA8C3F257C381B0019FCFB /* promo_1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = promo_1.png; path = ../../promo_1.png; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E6DA8C0A257C381A0019FCFB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E6DA8C1C257C381B0019FCFB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6DA8C25257C381B0019FCFB /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E6DA8C04257C381A0019FCFB = {
+			isa = PBXGroup;
+			children = (
+				E6DA8C0F257C381A0019FCFB /* Clickster */,
+				E6DA8C26257C381B0019FCFB /* Clickster Extension */,
+				E6DA8C23257C381B0019FCFB /* Frameworks */,
+				E6DA8C0E257C381A0019FCFB /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E6DA8C0E257C381A0019FCFB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E6DA8C0D257C381A0019FCFB /* Clickster.app */,
+				E6DA8C1F257C381B0019FCFB /* Clickster Extension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E6DA8C0F257C381A0019FCFB /* Clickster */ = {
+			isa = PBXGroup;
+			children = (
+				E6DA8C10257C381A0019FCFB /* Clickster.entitlements */,
+				E6DA8C11257C381A0019FCFB /* AppDelegate.swift */,
+				E6DA8C13257C381A0019FCFB /* Main.storyboard */,
+				E6DA8C16257C381A0019FCFB /* ViewController.swift */,
+				E6DA8C18257C381B0019FCFB /* Assets.xcassets */,
+				E6DA8C1A257C381B0019FCFB /* Info.plist */,
+			);
+			path = Clickster;
+			sourceTree = "<group>";
+		};
+		E6DA8C23257C381B0019FCFB /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				E6DA8C24257C381B0019FCFB /* Cocoa.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		E6DA8C26257C381B0019FCFB /* Clickster Extension */ = {
+			isa = PBXGroup;
+			children = (
+				E6DA8C34257C381B0019FCFB /* Resources */,
+				E6DA8C27257C381B0019FCFB /* SafariWebExtensionHandler.swift */,
+				E6DA8C29257C381B0019FCFB /* Info.plist */,
+				E6DA8C2A257C381B0019FCFB /* Clickster_Extension.entitlements */,
+			);
+			path = "Clickster Extension";
+			sourceTree = "<group>";
+		};
+		E6DA8C34257C381B0019FCFB /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				E6DA8C35257C381B0019FCFB /* popup */,
+				E6DA8C36257C381B0019FCFB /* PRIVACY_POLICY.md */,
+				E6DA8C37257C381B0019FCFB /* LICENSE */,
+				E6DA8C38257C381B0019FCFB /* Clickster */,
+				E6DA8C39257C381B0019FCFB /* example.gif */,
+				E6DA8C3A257C381B0019FCFB /* README.md */,
+				E6DA8C3B257C381B0019FCFB /* icons */,
+				E6DA8C3C257C381B0019FCFB /* manifest.json */,
+				E6DA8C3D257C381B0019FCFB /* promo_2.png */,
+				E6DA8C3E257C381B0019FCFB /* clickster.js */,
+				E6DA8C3F257C381B0019FCFB /* promo_1.png */,
+			);
+			name = Resources;
+			path = "Clickster Extension";
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E6DA8C0C257C381A0019FCFB /* Clickster */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E6DA8C31257C381B0019FCFB /* Build configuration list for PBXNativeTarget "Clickster" */;
+			buildPhases = (
+				E6DA8C09257C381A0019FCFB /* Sources */,
+				E6DA8C0A257C381A0019FCFB /* Frameworks */,
+				E6DA8C0B257C381A0019FCFB /* Resources */,
+				E6DA8C30257C381B0019FCFB /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E6DA8C22257C381B0019FCFB /* PBXTargetDependency */,
+			);
+			name = Clickster;
+			productName = Clickster;
+			productReference = E6DA8C0D257C381A0019FCFB /* Clickster.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E6DA8C1E257C381B0019FCFB /* Clickster Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E6DA8C2D257C381B0019FCFB /* Build configuration list for PBXNativeTarget "Clickster Extension" */;
+			buildPhases = (
+				E6DA8C1B257C381B0019FCFB /* Sources */,
+				E6DA8C1C257C381B0019FCFB /* Frameworks */,
+				E6DA8C1D257C381B0019FCFB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Clickster Extension";
+			productName = "Clickster Extension";
+			productReference = E6DA8C1F257C381B0019FCFB /* Clickster Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E6DA8C05257C381A0019FCFB /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1220;
+				LastUpgradeCheck = 1220;
+				TargetAttributes = {
+					E6DA8C0C257C381A0019FCFB = {
+						CreatedOnToolsVersion = 12.2;
+					};
+					E6DA8C1E257C381B0019FCFB = {
+						CreatedOnToolsVersion = 12.2;
+					};
+				};
+			};
+			buildConfigurationList = E6DA8C08257C381A0019FCFB /* Build configuration list for PBXProject "Clickster" */;
+			compatibilityVersion = "Xcode 9.3";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E6DA8C04257C381A0019FCFB;
+			productRefGroup = E6DA8C0E257C381A0019FCFB /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E6DA8C0C257C381A0019FCFB /* Clickster */,
+				E6DA8C1E257C381B0019FCFB /* Clickster Extension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E6DA8C0B257C381A0019FCFB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6DA8C19257C381B0019FCFB /* Assets.xcassets in Resources */,
+				E6DA8C15257C381A0019FCFB /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E6DA8C1D257C381B0019FCFB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6DA8C45257C381B0019FCFB /* README.md in Resources */,
+				E6DA8C42257C381B0019FCFB /* LICENSE in Resources */,
+				E6DA8C43257C381B0019FCFB /* Clickster in Resources */,
+				E6DA8C49257C381B0019FCFB /* clickster.js in Resources */,
+				E6DA8C48257C381B0019FCFB /* promo_2.png in Resources */,
+				E6DA8C40257C381B0019FCFB /* popup in Resources */,
+				E6DA8C4A257C381B0019FCFB /* promo_1.png in Resources */,
+				E6DA8C47257C381B0019FCFB /* manifest.json in Resources */,
+				E6DA8C44257C381B0019FCFB /* example.gif in Resources */,
+				E6DA8C46257C381B0019FCFB /* icons in Resources */,
+				E6DA8C41257C381B0019FCFB /* PRIVACY_POLICY.md in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E6DA8C09257C381A0019FCFB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6DA8C17257C381A0019FCFB /* ViewController.swift in Sources */,
+				E6DA8C12257C381A0019FCFB /* AppDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E6DA8C1B257C381B0019FCFB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6DA8C28257C381B0019FCFB /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E6DA8C22257C381B0019FCFB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E6DA8C1E257C381B0019FCFB /* Clickster Extension */;
+			targetProxy = E6DA8C21257C381B0019FCFB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		E6DA8C13257C381A0019FCFB /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				E6DA8C14257C381A0019FCFB /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		E6DA8C2B257C381B0019FCFB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E6DA8C2C257C381B0019FCFB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		E6DA8C2E257C381B0019FCFB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Clickster Extension/Clickster_Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = V4FL6SW725;
+				INFOPLIST_FILE = "Clickster Extension/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shortman.Clickster.Extension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E6DA8C2F257C381B0019FCFB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Clickster Extension/Clickster_Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = V4FL6SW725;
+				INFOPLIST_FILE = "Clickster Extension/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shortman.Clickster.Extension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E6DA8C32257C381B0019FCFB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Clickster/Clickster.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = V4FL6SW725;
+				INFOPLIST_FILE = Clickster/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shortman.Clickster;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E6DA8C33257C381B0019FCFB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Clickster/Clickster.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = V4FL6SW725;
+				INFOPLIST_FILE = Clickster/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shortman.Clickster;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E6DA8C08257C381A0019FCFB /* Build configuration list for PBXProject "Clickster" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E6DA8C2B257C381B0019FCFB /* Debug */,
+				E6DA8C2C257C381B0019FCFB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E6DA8C2D257C381B0019FCFB /* Build configuration list for PBXNativeTarget "Clickster Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E6DA8C2E257C381B0019FCFB /* Debug */,
+				E6DA8C2F257C381B0019FCFB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E6DA8C31257C381B0019FCFB /* Build configuration list for PBXNativeTarget "Clickster" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E6DA8C32257C381B0019FCFB /* Debug */,
+				E6DA8C33257C381B0019FCFB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = E6DA8C05257C381A0019FCFB /* Project object */;
+}

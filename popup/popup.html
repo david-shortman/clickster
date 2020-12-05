@@ -1,42 +1,111 @@
 <!DOCTYPE html>
 <style>
-    body {
-    background-color:  #1A0650;
-    font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  body {
+    background-color: #1a0650;
+    font-family: Helvetica, sans-serif;
     color: white;
     width: 290px;
-}
+    border: 5px solid;
+    border-image: linear-gradient(
+      to bottom right,
+      #b827fc 0%,
+      #2c90fc 25%,
+      #b8fd33 50%,
+      #fec837 75%,
+      #fd1892 100%
+    );
+    border-image-slice: 1;
+    margin: 0;
+    padding: 2px 10px 5px 10px;
+  }
+  input {
+    padding: 4px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+  }
+  button {
+    background-color: #bf16ab;
+    color: white;
+    width: 200px;
+    padding: 6px 10px;
+    margin: 8px 0;
+    font-size: 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  button:hover {
+    background-color: #670b5c;
+  }
 </style>
 <div id="content">
-    <h2>Clickster settings</h2>
-    <hr>
+  <img src="../icons/32.png" style="display: inline-block" />
+  <h2 style="display: inline-block">
+    <span style="font-family: 'Courier New', Courier, monospace"
+      >Clickster</span
+    >
+  </h2>
+  <hr
+    style="
+      margin-top: 0;
+      height: 2px;
+      border-width: 0;
+      color: gray;
+      background-image: linear-gradient(
+        to bottom right,
+        #b827fc 0%,
+        #2c90fc 25%,
+        #b8fd33 50%,
+        #fec837 75%,
+        #fd1892 100%
+      );
+    "
+  />
+  <div>
+    <h3>Target</h3>
     <div>
-        <h3>Target</h3>
-        <div>
-            <p id="no-element-selected-msg">No target selected yet</p>
-            <div id="element-selected-msg" hidden>
-                <p>The <span style="border:medium solid green">highlighted element</span> will be clicked.</p>
-                <button id="clear-selection-btn">Remove target</button>    
-            </div>
-        </div>
-        <div style="margin-top:5px">
-            <button id="select-element-btn">Select a target</button>
-            <br />
-            <br />
-            <strong>To select disabled buttons:</strong>
-            <br />
-            While hovering over the button, press Enter.
-            <br />
-            <strong>To select all other elements:</strong>
-            <br />
-            While hovering over the element, click the element.
-        </div>
+      <p id="no-element-selected-msg"><em>No target selected yet</em></p>
+      <div id="element-selected-msg" hidden>
+        <p>
+          The
+          <span
+            style="
+              border: 5px solid;
+              border-image: linear-gradient(
+                to bottom right,
+                #b827fc 0%,
+                #2c90fc 25%,
+                #b8fd33 50%,
+                #fec837 75%,
+                #fd1892 100%
+              );
+              border-image-slice: 1;
+            "
+            >highlighted element</span
+          >
+          will be clicked.
+        </p>
+        <button id="clear-selection-btn">Remove target</button>
+      </div>
     </div>
-    <div>
-        <h3>Frequency</h3>
-        <p>Click target every <input id="click-interval-fld" style="width:40px" /> second(s)</p>
-        <p>Seconds until next click: <span id="time-until-click-lbl">-</span></p>
+    <div style="margin-top: 5px">
+      <button id="select-element-btn">Select a target</button>
+      <br />
+      <p>
+        While hovering over a target, click the element or press Enter to set
+        the target.
+      </p>
     </div>
+  </div>
+  <div>
+    <h3>Frequency</h3>
+    <p>
+      Click target every
+      <input id="click-interval-fld" style="width: 40px" placeholder="0" />
+      second(s)
+    </p>
+    <p>Seconds until next click: <span id="time-until-click-lbl">-</span></p>
+  </div>
 </div>
-<script src="popup.js">
-</script>
+<script src="popup.js"></script>
