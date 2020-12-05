@@ -1,0 +1,34 @@
+{
+  "manifest_version": 2,
+  "name": "Clickster",
+  "version": "0.0.1",
+  "description": "Select an element to be automatically clicked at a determined interval.",
+  "icons": {
+    "48": "icons/48.png",
+    "96": "icons/96.png",
+    "128": "icons/128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "clickster.js"
+      ],
+      "css": [
+        "popup/tooltip.css",
+        "popup/popup.css"
+      ]
+    }
+  ],
+  "browser_action": {
+    "default_icon": "icons/48.png",
+    "default_title": "Clickster",
+    "default_popup": "popup/popup.html"
+  },
+  "permissions": [
+    "<all_urls>",
+    "activeTab"
+  ]
+}
