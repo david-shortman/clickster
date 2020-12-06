@@ -62,3 +62,14 @@ const getTimeUntilClickMessenger = createActiveTabMessenger("GET_TIME_UNTIL_CLIC
 setInterval(() => {
     getTimeUntilClickMessenger.send();
 }, 1000);
+
+document.getElementById('advanced-options-btn').addEventListener('click', () => {
+    document.getElementById('advanced-options-btn').hidden = true;
+    document.getElementById('advanced-options-sctn').hidden = false;
+});
+
+document.getElementById('apply-elements-query-btn').addEventListener('click', () => {
+    const value = document.getElementById('advanced-elements-query-txtarea').value;
+    console.log(value);
+    createActiveTabMessenger({ advancedQuery: value }).send();
+});

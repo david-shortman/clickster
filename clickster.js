@@ -7,11 +7,8 @@ let clickInterval = 3000;
 let clickerId,
   timeLastClicked,
   lastHoveredElement,
-  lastSelectedElement,
-  lastHoveredElementBorder,
-  lastSelectedElementBorder,
   shouldNextClickSelectAnElement,
-  selectedElementToClick;
+  selectedElementsToClick = {};
 
 const elementsThatWereDisabledOnPageLoad = document.body.querySelectorAll(
   "*:disabled"
@@ -50,26 +47,50 @@ document.addEventListener("mousemove", (event) => {
 });
 
 function displayAsSelected(element) {
-  selectedElementToClick.style.border = "thick solid";
-  selectedElementToClick.style["border-image"] =
+  element.style.border = "thick solid";
+  element.style["border-image-source"] =
     "linear-gradient(to bottom right, #b827fc 0%, #2c90fc 25%, #b8fd33 50%, #fec837 75%, #fd1892 100%)";
-  selectedElementToClick.style["border-image-slice"] = 1;
+  element.style["border-image-slice"] = 1;
 }
 
-function clickElement() {
-  selectedElementToClick.click();
-  selectedElementToClick.style.border = "thick solid silver";
-  setTimeout(() => displayAsSelected(selectedElementToClick), 500);
+function clickSelectedElements() {
+  Object.values(selectedElementsToClick).forEach((element) => {
+    if (element.ref.click) {
+      element.ref.click();
+      element.ref.style.border = "thick solid silver";
+      setTimeout(() => displayAsSelected(element.ref), 500);
+    }
+  });
   timeLastClicked = new Date();
 }
 
-function displayElementAsSelected(element) {
-  lastSelectedElementBorder = element.style.border;
+let idCounter = 0;
+function getNextId() {
+  idCounter += 1;
+  return idCounter;
+}
+
+function targetElement(element) {
+  if (!element.clicksterId) {
+    element.clicksterId = getNextId();
+  }
+  selectedElementsToClick = {
+    ...selectedElementsToClick,
+    [element.clicksterId]: {
+      originalBorder: element.style.border,
+      originalBorderImageSource: element.style["border-image-source"],
+      originalBorderImageSlice: element.style["border-image-slice"],
+      ref: element
+    },
+  };
   displayAsSelected(element);
 }
 
 function removeSelectedHighlight(element) {
-  element.style.border = lastSelectedElementBorder;
+  const { originalBorder, originalBorderImageSource, originalBorderImageSlice } = selectedElementsToClick[element.ref.clicksterId];
+  element.ref.style.border = originalBorder;
+  element.ref.style["border-image"] = originalBorderImageSource;
+  element.ref.style["border-image-slice"] = originalBorderImageSlice;
 }
 
 function setSelectedElement(event) {
@@ -81,19 +102,19 @@ function setSelectedElement(event) {
     });
 
     removeHoverHighlight(lastHoveredElement);
-    if (lastSelectedElement) {
-      removeSelectedHighlight(lastSelectedElement);
-    }
+    Object.entries(selectedElementsToClick).forEach(([key, { ref }]) => {
+      removeSelectedHighlight(ref);
+      delete selectedElementsToClick[key];
+    });
 
-    selectedElementToClick = document.elementFromPoint(clientX, clientY);
-    displayElementAsSelected(selectedElementToClick);
+    const selectedElement = document.elementFromPoint(clientX, clientY);
+    targetElement(selectedElement);
 
     timeLastClicked = new Date();
-    clickerId = setInterval(clickElement, clickInterval);
+    clickerId = setInterval(clickSelectedElements, clickInterval);
 
     isSelectionModeEnabled = false;
     shouldNextClickSelectAnElement = false;
-    lastSelectedElement = selectedElementToClick;
   }
 }
 
@@ -118,7 +139,7 @@ function sendTimeUntilClickResponse() {
 
 function sendIsElementSelectedResponse() {
   browser.runtime.sendMessage(
-    !!selectedElementToClick ? "ELEMENT_IS_SELECTED" : "NO_ELEMENT_IS_SELECTED"
+    Object.values(selectedElementsToClick).length > 0 ? "ELEMENT_IS_SELECTED" : "NO_ELEMENT_IS_SELECTED"
   );
 }
 
@@ -131,12 +152,12 @@ function sendClickIntervalResponse() {
 function updateClickInterval(newClickInterval) {
   clickInterval = newClickInterval * 1000;
   clearInterval(clickerId);
-  clickerId = setInterval(clickElement, clickInterval);
+  clickerId = setInterval(clickSelectedElements, clickInterval);
 }
 
 function enableSelectionMode() {
   isSelectionModeEnabled = true;
-  selectedElementToClick = null;
+  // selectedElementsToClick = null;
   clearInterval(clickerId);
 
   elementsThatWereDisabledOnPageLoad.forEach((elem) => {
@@ -144,11 +165,26 @@ function enableSelectionMode() {
   });
 }
 
-function manuallyClearSelectedElement() {
+function manuallyClearSelectedElements() {
   clearInterval(clickerId);
   timeLastClicked = null;
-  selectedElementToClick.style.border = lastSelectedElementBorder;
-  selectedElementToClick = null;
+  Object.entries(selectedElementsToClick).forEach(([key, value]) => {
+    removeSelectedHighlight(value);
+    delete selectedElementsToClick[key];
+  })
+  // selectedElementsToClick = null;
+}
+
+function applyQuery(query) {
+  const elementSelectors = query.split("\n");
+  const selectedElements = elementSelectors
+    .map((selector) => [...document.body.querySelectorAll(selector)]);
+  const flattened = selectedElements.flat();
+  flattened.forEach((element) => {
+    targetElement(element);
+  });
+  clearInterval(clickerId);
+  clickerId = setInterval(clickSelectedElements, clickInterval);
 }
 
 browser.runtime.onMessage.addListener(function (message) {
@@ -163,6 +199,8 @@ browser.runtime.onMessage.addListener(function (message) {
   } else if (message === "SELECT_ELEMENT_CLICKED") {
     enableSelectionMode();
   } else if (message === "CLEAR_SELECTED_ELEMENT") {
-    manuallyClearSelectedElement();
+    manuallyClearSelectedElements();
+  } else if (message.advancedQuery) {
+    applyQuery(message.advancedQuery);
   }
 });
