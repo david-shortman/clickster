@@ -1,0 +1,90 @@
+<script>
+
+    setTimeout(() => {
+        document.getElementById('someButtonOneId').disabled = true;
+        document.getElementById('someButtonTwoId').disabled = true;
+
+        document.getElementById('someButtonTwoId').addEventListener('click', confirmSquashAndMergeButtonClicked);
+        document.getElementById('someButtonOneId').addEventListener('click', squashAndMergeButtonClicked);
+        document.getElementById('someButtonThreeId').addEventListener('click', updateBranchClicked);
+        setUpRandomState();
+
+    }, 500);
+
+    setInterval(() => {
+        setUpRandomState();
+    }, 10000);
+
+    function setUpRandomState() {
+        var disableButtonOne = Math.random() < 0.5;
+        if(disableButtonOne) {
+            setUpSquashAndMergeAvailableState();
+        } else {
+            setUpBranchNeedsToBeUpdatedState();
+        }
+    }
+
+    function setUpSquashAndMergeAvailableState() {
+        document.getElementById('someButtonOneId').disabled = false;
+        document.getElementById('someButtonTwoId').style.display = 'none';
+        document.getElementById('someButtonThreeId').style.display = 'none';
+        document.getElementById('someButtonTwoId').disabled = true;
+
+    }
+
+    function setUpBranchNeedsToBeUpdatedState() {
+        document.getElementById('someButtonOneId').disabled = true;
+        document.getElementById('someButtonThreeId').disabled = false;
+        document.getElementById('someButtonTwoId').style.display = 'none';
+        document.getElementById('someButtonThreeId').style.display = 'block';
+        document.getElementById('someButtonTwoId').disabled = true;
+    }
+
+    function squashAndMergeButtonClicked() {
+        console.log('squash and merge clicked');
+        const someButton = document.getElementById('someButtonTwoId');
+        someButton.style.display = 'block';
+        document.getElementById('someButtonOneId').disabled = true;
+        document.getElementById('someButtonTwoId').disabled = false;
+    }
+
+    function confirmSquashAndMergeButtonClicked() {
+        console.log('confirm squash and merge clicked');
+        const someButton = document.getElementById('someButtonTwoId');
+        someButton.style.display = 'none';
+        someButton.disabled = true;
+    }
+
+    function updateBranchClicked() {
+        console.log('update branch clicked');
+        const updateBranchButton = document.getElementById('someButtonThreeId');
+        updateBranchButton.disabled = true;
+    }
+</script>
+
+
+<div style='width:100%'>
+    <div style='width:100%; height: 30px'>
+        <button id='someButtonOneId' class='button-class button-1-class squash-and-merge'>Squash and Merge</button>
+    </div>
+    <div style='width:100%; height: 30px'>
+        <button id='someButtonTwoId' class='button-class button-2-class confirm-squash-and-merge'>Confirm Squash and Merge</button>
+    </div>
+    <div style='width:100%; height: 30px'>
+        <button id='someButtonThreeId' class='button-class button-3-class update-branch'>Update Branch</button>
+    </div>
+    <div style='width:100%; height: 30px'>
+        <button id='someButtonFourId' class='button-class button-4-class'>Some Other Button</button>
+    </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
