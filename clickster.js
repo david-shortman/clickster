@@ -1,6 +1,7 @@
 const isChrome = !window["browser"] && !!chrome;
 // Prefer the more standard `browser` before Chrome API
 const browser = isChrome ? chrome : window["browser"];
+let clicksterEnabled = false;
 
 let isSelectionModeEnabled = false;
 let clickInterval = 3000;
@@ -54,14 +55,14 @@ function displayAsSelected(element) {
 }
 
 function clickSelectedElements() {
-  Object.values(selectedElementsToClick).forEach((element) => {
-    if (element.ref.click) {
-      element.ref.click();
-      element.ref.style.border = "thick solid silver";
-      setTimeout(() => displayAsSelected(element.ref), 500);
-    }
-  });
-  timeLastClicked = new Date();
+    Object.values(selectedElementsToClick).forEach((element) => {
+      if (element.ref.click) {
+        element.ref.click();
+        element.ref.style.border = "thick solid silver";
+        setTimeout(() => displayAsSelected(element.ref), 500);
+      }
+    });
+    timeLastClicked = new Date();
 }
 
 let idCounter = 0;
@@ -111,10 +112,22 @@ function setSelectedElement(event) {
     targetElement(selectedElement);
 
     timeLastClicked = new Date();
-    clickerId = setInterval(clickSelectedElements, clickInterval);
+    startClicking();
 
     isSelectionModeEnabled = false;
     shouldNextClickSelectAnElement = false;
+  }
+}
+
+function startClicking() {
+  if(clicksterEnabled) {
+    clickerId = setInterval(clickSelectedElements, clickInterval);
+  }
+}
+
+function stopClicking() {
+  if(!!clickerId) {
+    clearInterval(clickerId);
   }
 }
 
@@ -149,16 +162,23 @@ function sendClickIntervalResponse() {
   });
 }
 
+function sendIsEnabled() {
+  console.log('sending ', clicksterEnabled);
+  browser.runtime.sendMessage({
+    clicksterEnabled: clicksterEnabled,
+  });
+}
+
 function updateClickInterval(newClickInterval) {
   clickInterval = newClickInterval * 1000;
-  clearInterval(clickerId);
-  clickerId = setInterval(clickSelectedElements, clickInterval);
+  stopClicking();
+  startClicking();
 }
 
 function enableSelectionMode() {
   isSelectionModeEnabled = true;
   // selectedElementsToClick = null;
-  clearInterval(clickerId);
+  stopClicking();
 
   elementsThatWereDisabledOnPageLoad.forEach((elem) => {
     elem.disabled = false;
@@ -166,7 +186,7 @@ function enableSelectionMode() {
 }
 
 function manuallyClearSelectedElements() {
-  clearInterval(clickerId);
+  stopClicking()
   timeLastClicked = null;
   Object.entries(selectedElementsToClick).forEach(([key, value]) => {
     removeSelectedHighlight(value);
@@ -176,6 +196,7 @@ function manuallyClearSelectedElements() {
 }
 
 function applyQuery(query) {
+  lastQuery = query;
   const elementSelectors = query.split("\n");
   const selectedElements = elementSelectors
     .map((selector) => [...document.body.querySelectorAll(selector)]);
@@ -183,9 +204,10 @@ function applyQuery(query) {
   flattened.forEach((element) => {
     targetElement(element);
   });
-  clearInterval(clickerId);
-  clickerId = setInterval(clickSelectedElements, clickInterval);
+  stopClicking();
+  startClicking();
 }
+
 
 browser.runtime.onMessage.addListener(function (message) {
   if (message === "GET_TIME_UNTIL_CLICK") {
@@ -202,5 +224,16 @@ browser.runtime.onMessage.addListener(function (message) {
     manuallyClearSelectedElements();
   } else if (message.advancedQuery) {
     applyQuery(message.advancedQuery);
+  } else if(message === "STOP_CLICKING") {
+    clicksterEnabled = false;
+    console.log('got stop clicking message');
+    stopClicking();
+  } else if (message === "START_CLICKING") {
+    console.log('got start clicking message');
+    clicksterEnabled = true;
+    startClicking();
+  } else if (message === "GET_IS_CLICKSTER_ENABLED") {
+    console.log('GOT IS ENABLED MESSAGE');
+    sendIsEnabled();
   }
 });

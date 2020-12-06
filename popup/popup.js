@@ -1,6 +1,8 @@
 const isChrome = !window['browser'] && !!chrome;
 // Prefer the more standard `browser` before Chrome API
 const browser = isChrome ? chrome : window['browser'];
+clicksterEnabled = false;
+console.log('aaaaaaaa');
 
 function sendMessageToCurrentTab(currentTabId, message) {
     if (currentTabId >= 0) {
@@ -20,6 +22,16 @@ function createActiveTabMessenger(message) {
     };
 }
 
+function startButtonClicked() {
+    createActiveTabMessenger("START_CLICKING").send();
+    createActiveTabMessenger("GET_IS_CLICKSTER_ENABLED").send();
+}
+
+function stopButtonClicked() {
+    createActiveTabMessenger("STOP_CLICKING").send();
+    createActiveTabMessenger("GET_IS_CLICKSTER_ENABLED").send();
+}
+
 function onSelectElementClicked() {
     const button =  document.getElementById('select-element-btn');
     button.innerText = 'Selecting...';
@@ -32,6 +44,7 @@ document.getElementById('select-element-btn').addEventListener('click', onSelect
 
 createActiveTabMessenger("IS_ELEMENT_SELECTED").send();
 createActiveTabMessenger("GET_CLICK_INTERVAL").send();
+createActiveTabMessenger("GET_IS_CLICKSTER_ENABLED").send();
 
 document.getElementById('click-interval-fld').addEventListener('input', (e) => {
     createActiveTabMessenger({ newClickInterval: e.target.value }).send();
@@ -44,7 +57,11 @@ document.getElementById('clear-selection-btn').addEventListener('click', () => {
     document.getElementById('element-selected-msg').hidden = true;
 });
 
+document.getElementById('clickster-start-button').addEventListener('click', startButtonClicked);
+document.getElementById('clickster-stop-button').addEventListener('click', stopButtonClicked);
+
 browser.runtime.onMessage.addListener(function (message) {
+    console.log('got a message ', message);
     if (message === "ELEMENT_IS_SELECTED") {
         document.getElementById('no-element-selected-msg').hidden = true;
         document.getElementById('element-selected-msg').hidden = false;
@@ -55,6 +72,15 @@ browser.runtime.onMessage.addListener(function (message) {
         document.getElementById('time-until-click-lbl').innerText = Math.floor(message.timeUntilClick / 1000);
     } else if (message.clickInterval) {
         document.getElementById('click-interval-fld').value = message.clickInterval;
+    } else if (!!message.clicksterEnabled) {
+        console.log('got clickster enabled message ', message.clicksterEnabled);
+        if(message.clicksterEnabled) {
+            document.getElementById('clickster-start-button').style.display = 'none';
+            document.getElementById('clickster-stop-button').style.display = 'block';
+        } else {
+            document.getElementById('clickster-start-button').style.display = 'block';
+            document.getElementById('clickster-stop-button').style.display = 'none';
+        }
     }
 });
 
@@ -70,6 +96,5 @@ document.getElementById('advanced-options-btn').addEventListener('click', () => 
 
 document.getElementById('apply-elements-query-btn').addEventListener('click', () => {
     const value = document.getElementById('advanced-elements-query-txtarea').value;
-    console.log(value);
     createActiveTabMessenger({ advancedQuery: value }).send();
 });
