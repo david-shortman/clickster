@@ -4,11 +4,11 @@ const browser = isChrome ? chrome : window["browser"];
 let clicksterEnabled = false;
 
 let isSelectionModeEnabled = false;
-let clickInterval = localStorage.getItem('clicksterClickInterval');
+let clickInterval = localStorage.getItem("clicksterClickInterval");
 if (!clickInterval) {
   clickInterval = 3000;
 }
-localStorage.setItem('clicksterClickInterval', clickInterval);
+localStorage.setItem("clicksterClickInterval", clickInterval);
 
 let clickerId,
   timeLastClicked,
@@ -60,14 +60,14 @@ function displayAsSelected(element) {
 }
 
 function clickSelectedElements() {
-    Object.values(selectedElementsToClick).forEach((element) => {
-      if (element.ref.click) {
-        element.ref.click();
-        element.ref.style.border = "thick solid silver";
-        setTimeout(() => displayAsSelected(element.ref), 500);
-      }
-    });
-    timeLastClicked = new Date();
+  Object.values(selectedElementsToClick).forEach((element) => {
+    if (element.ref.click) {
+      element.ref.click();
+      element.ref.style.border = "thick solid silver";
+      setTimeout(() => displayAsSelected(element.ref), 500);
+    }
+  });
+  timeLastClicked = new Date();
 }
 
 let idCounter = 0;
@@ -86,14 +86,18 @@ function targetElement(element) {
       originalBorder: element.style.border,
       originalBorderImageSource: element.style["border-image-source"],
       originalBorderImageSlice: element.style["border-image-slice"],
-      ref: element
+      ref: element,
     },
   };
   displayAsSelected(element);
 }
 
 function removeSelectedHighlight(element) {
-  const { originalBorder, originalBorderImageSource, originalBorderImageSlice } = selectedElementsToClick[element.ref.clicksterId];
+  const {
+    originalBorder,
+    originalBorderImageSource,
+    originalBorderImageSlice,
+  } = selectedElementsToClick[element.ref.clicksterId];
   element.ref.style.border = originalBorder;
   element.ref.style["border-image"] = originalBorderImageSource;
   element.ref.style["border-image-slice"] = originalBorderImageSlice;
@@ -125,13 +129,13 @@ function setSelectedElement(event) {
 }
 
 function startClicking() {
-  if(clicksterEnabled) {
+  if (clicksterEnabled) {
     clickerId = setInterval(clickSelectedElements, clickInterval);
   }
 }
 
 function stopClicking() {
-  if(!!clickerId) {
+  if (!!clickerId) {
     clearInterval(clickerId);
   }
 }
@@ -157,7 +161,9 @@ function sendTimeUntilClickResponse() {
 
 function sendIsElementSelectedResponse() {
   browser.runtime.sendMessage(
-    Object.values(selectedElementsToClick).length > 0 ? "ELEMENT_IS_SELECTED" : "NO_ELEMENT_IS_SELECTED"
+    Object.values(selectedElementsToClick).length > 0
+      ? "ELEMENT_IS_SELECTED"
+      : "NO_ELEMENT_IS_SELECTED"
   );
 }
 
@@ -174,8 +180,8 @@ function sendIsEnabled() {
 }
 
 function sendCachedQueryInfo() {
-  const cachedQuery = localStorage.getItem('clicksterQuery');
-  if(!!cachedQuery) {
+  const cachedQuery = localStorage.getItem("clicksterQuery");
+  if (!!cachedQuery) {
     browser.runtime.sendMessage({
       clicksterCachedQuery: cachedQuery,
     });
@@ -184,7 +190,7 @@ function sendCachedQueryInfo() {
 
 function updateClickInterval(newClickInterval) {
   clickInterval = newClickInterval * 1000;
-  localStorage.setItem('clicksterClickInterval', clickInterval);
+  localStorage.setItem("clicksterClickInterval", clickInterval);
   stopClicking();
   startClicking();
 }
@@ -200,21 +206,22 @@ function enableSelectionMode() {
 }
 
 function manuallyClearSelectedElements() {
-  stopClicking()
+  stopClicking();
   timeLastClicked = null;
   Object.entries(selectedElementsToClick).forEach(([key, value]) => {
     removeSelectedHighlight(value);
     delete selectedElementsToClick[key];
-  })
-  localStorage.removeItem('clicksterQuery');
+  });
+  localStorage.removeItem("clicksterQuery");
 }
 
 function applyQuery(query) {
-  localStorage.setItem('clicksterQuery', query);
+  localStorage.setItem("clicksterQuery", query);
   lastQuery = query;
   const elementSelectors = query.split("\n");
-  const selectedElements = elementSelectors
-    .map((selector) => [...document.body.querySelectorAll(selector)]);
+  const selectedElements = elementSelectors.map((selector) => [
+    ...document.body.querySelectorAll(selector),
+  ]);
   const flattened = selectedElements.flat();
   flattened.forEach((element) => {
     targetElement(element);
@@ -222,7 +229,6 @@ function applyQuery(query) {
   stopClicking();
   startClicking();
 }
-
 
 browser.runtime.onMessage.addListener(function (message) {
   if (message === "GET_TIME_UNTIL_CLICK") {
@@ -239,7 +245,7 @@ browser.runtime.onMessage.addListener(function (message) {
     manuallyClearSelectedElements();
   } else if (message.advancedQuery) {
     applyQuery(message.advancedQuery);
-  } else if(message === "STOP_CLICKING") {
+  } else if (message === "STOP_CLICKING") {
     clicksterEnabled = false;
     stopClicking();
   } else if (message === "START_CLICKING") {
@@ -252,6 +258,6 @@ browser.runtime.onMessage.addListener(function (message) {
   }
 });
 
-if(!!localStorage.getItem('clicksterQuery')) {
-  applyQuery(localStorage.getItem('clicksterQuery'));
+if (!!localStorage.getItem("clicksterQuery")) {
+  applyQuery(localStorage.getItem("clicksterQuery"));
 }
