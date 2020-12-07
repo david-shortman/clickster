@@ -1,9 +1,15 @@
 const isChrome = !window["browser"] && !!chrome;
 // Prefer the more standard `browser` before Chrome API
 const browser = isChrome ? chrome : window["browser"];
+let clicksterEnabled = false;
 
 let isSelectionModeEnabled = false;
-let clickInterval = 3000;
+let clickInterval = localStorage.getItem("clicksterClickInterval");
+if (!clickInterval) {
+  clickInterval = 3000;
+}
+localStorage.setItem("clicksterClickInterval", clickInterval);
+
 let clickerId,
   timeLastClicked,
   lastHoveredElement,
@@ -80,14 +86,18 @@ function targetElement(element) {
       originalBorder: element.style.border,
       originalBorderImageSource: element.style["border-image-source"],
       originalBorderImageSlice: element.style["border-image-slice"],
-      ref: element
+      ref: element,
     },
   };
   displayAsSelected(element);
 }
 
 function removeSelectedHighlight(element) {
-  const { originalBorder, originalBorderImageSource, originalBorderImageSlice } = selectedElementsToClick[element.ref.clicksterId];
+  const {
+    originalBorder,
+    originalBorderImageSource,
+    originalBorderImageSlice,
+  } = selectedElementsToClick[element.ref.clicksterId];
   element.ref.style.border = originalBorder;
   element.ref.style["border-image"] = originalBorderImageSource;
   element.ref.style["border-image-slice"] = originalBorderImageSlice;
@@ -111,10 +121,22 @@ function setSelectedElement(event) {
     targetElement(selectedElement);
 
     timeLastClicked = new Date();
-    clickerId = setInterval(clickSelectedElements, clickInterval);
+    startClicking();
 
     isSelectionModeEnabled = false;
     shouldNextClickSelectAnElement = false;
+  }
+}
+
+function startClicking() {
+  if (clicksterEnabled) {
+    clickerId = setInterval(clickSelectedElements, clickInterval);
+  }
+}
+
+function stopClicking() {
+  if (!!clickerId) {
+    clearInterval(clickerId);
   }
 }
 
@@ -139,7 +161,9 @@ function sendTimeUntilClickResponse() {
 
 function sendIsElementSelectedResponse() {
   browser.runtime.sendMessage(
-    Object.values(selectedElementsToClick).length > 0 ? "ELEMENT_IS_SELECTED" : "NO_ELEMENT_IS_SELECTED"
+    Object.values(selectedElementsToClick).length > 0
+      ? "ELEMENT_IS_SELECTED"
+      : "NO_ELEMENT_IS_SELECTED"
   );
 }
 
@@ -149,16 +173,32 @@ function sendClickIntervalResponse() {
   });
 }
 
+function sendIsEnabled() {
+  browser.runtime.sendMessage({
+    clicksterEnabled: clicksterEnabled,
+  });
+}
+
+function sendCachedQueryInfo() {
+  const cachedQuery = localStorage.getItem("clicksterQuery");
+  if (!!cachedQuery) {
+    browser.runtime.sendMessage({
+      clicksterCachedQuery: cachedQuery,
+    });
+  }
+}
+
 function updateClickInterval(newClickInterval) {
   clickInterval = newClickInterval * 1000;
-  clearInterval(clickerId);
-  clickerId = setInterval(clickSelectedElements, clickInterval);
+  localStorage.setItem("clicksterClickInterval", clickInterval);
+  stopClicking();
+  startClicking();
 }
 
 function enableSelectionMode() {
   isSelectionModeEnabled = true;
   // selectedElementsToClick = null;
-  clearInterval(clickerId);
+  stopClicking();
 
   elementsThatWereDisabledOnPageLoad.forEach((elem) => {
     elem.disabled = false;
@@ -166,25 +206,28 @@ function enableSelectionMode() {
 }
 
 function manuallyClearSelectedElements() {
-  clearInterval(clickerId);
+  stopClicking();
   timeLastClicked = null;
   Object.entries(selectedElementsToClick).forEach(([key, value]) => {
     removeSelectedHighlight(value);
     delete selectedElementsToClick[key];
-  })
-  // selectedElementsToClick = null;
+  });
+  localStorage.removeItem("clicksterQuery");
 }
 
 function applyQuery(query) {
+  localStorage.setItem("clicksterQuery", query);
+  lastQuery = query;
   const elementSelectors = query.split("\n");
-  const selectedElements = elementSelectors
-    .map((selector) => [...document.body.querySelectorAll(selector)]);
+  const selectedElements = elementSelectors.map((selector) => [
+    ...document.body.querySelectorAll(selector),
+  ]);
   const flattened = selectedElements.flat();
   flattened.forEach((element) => {
     targetElement(element);
   });
-  clearInterval(clickerId);
-  clickerId = setInterval(clickSelectedElements, clickInterval);
+  stopClicking();
+  startClicking();
 }
 
 browser.runtime.onMessage.addListener(function (message) {
@@ -202,5 +245,19 @@ browser.runtime.onMessage.addListener(function (message) {
     manuallyClearSelectedElements();
   } else if (message.advancedQuery) {
     applyQuery(message.advancedQuery);
+  } else if (message === "STOP_CLICKING") {
+    clicksterEnabled = false;
+    stopClicking();
+  } else if (message === "START_CLICKING") {
+    clicksterEnabled = true;
+    startClicking();
+  } else if (message === "GET_IS_CLICKSTER_ENABLED") {
+    sendIsEnabled();
+  } else if (message === "GET_CLICKSTER_CACHED_QUERY") {
+    sendCachedQueryInfo();
   }
 });
+
+if (!!localStorage.getItem("clicksterQuery")) {
+  applyQuery(localStorage.getItem("clicksterQuery"));
+}

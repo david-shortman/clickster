@@ -1,75 +1,134 @@
-const isChrome = !window['browser'] && !!chrome;
+const isChrome = !window["browser"] && !!chrome;
 // Prefer the more standard `browser` before Chrome API
-const browser = isChrome ? chrome : window['browser'];
+const browser = isChrome ? chrome : window["browser"];
+clicksterEnabled = false;
 
 function sendMessageToCurrentTab(currentTabId, message) {
-    if (currentTabId >= 0) {
-        browser.tabs.sendMessage(currentTabId, message);
-    }
+  if (currentTabId >= 0) {
+    browser.tabs.sendMessage(currentTabId, message);
+  }
 }
 
 function createActiveTabMessenger(message) {
-    return {
-        send: function () {
-            if (isChrome) {
-                browser.tabs.getSelected(function ({ id }) { sendMessageToCurrentTab(id, message); });
-            } else {
-                browser.tabs.query({ active: true }).then(function (currentTabs) { sendMessageToCurrentTab(currentTabs[0].id, message); })
-            }
-        }
-    };
+  return {
+    send: function () {
+      if (isChrome) {
+        browser.tabs.getSelected(function ({ id }) {
+          sendMessageToCurrentTab(id, message);
+        });
+      } else {
+        browser.tabs.query({ active: true }).then(function (currentTabs) {
+          sendMessageToCurrentTab(currentTabs[0].id, message);
+        });
+      }
+    },
+  };
+}
+
+function startButtonClicked() {
+  createActiveTabMessenger("START_CLICKING").send();
+  createActiveTabMessenger("GET_IS_CLICKSTER_ENABLED").send();
+}
+
+function stopButtonClicked() {
+  createActiveTabMessenger("STOP_CLICKING").send();
+  createActiveTabMessenger("GET_IS_CLICKSTER_ENABLED").send();
 }
 
 function onSelectElementClicked() {
-    const button =  document.getElementById('select-element-btn');
-    button.innerText = 'Selecting...';
-    button.disabled = true;
-    createActiveTabMessenger("SELECT_ELEMENT_CLICKED").send();
-    window.close();
+  const button = document.getElementById("select-element-btn");
+  button.innerText = "Selecting...";
+  button.disabled = true;
+  createActiveTabMessenger("SELECT_ELEMENT_CLICKED").send();
+  window.close();
 }
 
-document.getElementById('select-element-btn').addEventListener('click', onSelectElementClicked);
+function runLoadCachedQuery() {
+  createActiveTabMessenger("GET_CLICKSTER_CACHED_QUERY").send();
+}
+
+document
+  .getElementById("select-element-btn")
+  .addEventListener("click", onSelectElementClicked);
 
 createActiveTabMessenger("IS_ELEMENT_SELECTED").send();
 createActiveTabMessenger("GET_CLICK_INTERVAL").send();
 
-document.getElementById('click-interval-fld').addEventListener('input', (e) => {
-    createActiveTabMessenger({ newClickInterval: e.target.value }).send();
+document.getElementById("click-interval-fld").addEventListener("input", (e) => {
+  createActiveTabMessenger({ newClickInterval: e.target.value }).send();
 });
 
-const clearSelectionMessenger = createActiveTabMessenger("CLEAR_SELECTED_ELEMENT");
-document.getElementById('clear-selection-btn').addEventListener('click', () => {
-    clearSelectionMessenger.send()
-    document.getElementById('no-element-selected-msg').hidden = false;
-    document.getElementById('element-selected-msg').hidden = true;
+const clearSelectionMessenger = createActiveTabMessenger(
+  "CLEAR_SELECTED_ELEMENT"
+);
+document.getElementById("clear-selection-btn").addEventListener("click", () => {
+  clearSelectionMessenger.send();
+  document.getElementById("no-element-selected-msg").hidden = false;
+  document.getElementById("element-selected-msg").hidden = true;
+  document.getElementById("advanced-options-btn").hidden = false;
+  document.getElementById("advanced-options-sctn").hidden = true;
 });
+
+document
+  .getElementById("clickster-start-button")
+  .addEventListener("click", startButtonClicked);
+document
+  .getElementById("clickster-stop-button")
+  .addEventListener("click", stopButtonClicked);
 
 browser.runtime.onMessage.addListener(function (message) {
-    if (message === "ELEMENT_IS_SELECTED") {
-        document.getElementById('no-element-selected-msg').hidden = true;
-        document.getElementById('element-selected-msg').hidden = false;
-    } else if (message === "NO_ELEMENT_IS_SELECTED") {
-        document.getElementById('no-element-selected-msg').hidden = false;
-        document.getElementById('element-selected-msg').hidden = true;
-    } else if (message.timeUntilClick) {
-        document.getElementById('time-until-click-lbl').innerText = Math.floor(message.timeUntilClick / 1000);
-    } else if (message.clickInterval) {
-        document.getElementById('click-interval-fld').value = message.clickInterval;
+  if (message === "ELEMENT_IS_SELECTED") {
+    document.getElementById("no-element-selected-msg").hidden = true;
+    document.getElementById("element-selected-msg").hidden = false;
+  } else if (message === "NO_ELEMENT_IS_SELECTED") {
+    document.getElementById("no-element-selected-msg").hidden = false;
+    document.getElementById("element-selected-msg").hidden = true;
+  } else if (message.timeUntilClick) {
+    document.getElementById("time-until-click-lbl").innerText = Math.floor(
+      message.timeUntilClick / 1000
+    );
+  } else if (message.clickInterval) {
+    document.getElementById("click-interval-fld").value = message.clickInterval;
+  } else if (
+    message.clicksterEnabled !== null &&
+    message.clicksterEnabled !== undefined
+  ) {
+    if (message.clicksterEnabled === true) {
+      document.getElementById("clickster-start-button").style.display = "none";
+      document.getElementById("clickster-stop-button").style.display = "block";
+    } else {
+      document.getElementById("clickster-start-button").style.display = "block";
+      document.getElementById("clickster-stop-button").style.display = "none";
     }
+  } else if (!!message.clicksterCachedQuery) {
+    document.getElementById("advanced-options-btn").hidden = true;
+    document.getElementById("advanced-options-sctn").hidden = false;
+    document.getElementById("advanced-elements-query-txtarea").value =
+      message.clicksterCachedQuery;
+  }
 });
 
-const getTimeUntilClickMessenger = createActiveTabMessenger("GET_TIME_UNTIL_CLICK");
+const getTimeUntilClickMessenger = createActiveTabMessenger(
+  "GET_TIME_UNTIL_CLICK"
+);
 setInterval(() => {
-    getTimeUntilClickMessenger.send();
+  getTimeUntilClickMessenger.send();
 }, 1000);
 
-document.getElementById('advanced-options-btn').addEventListener('click', () => {
-    document.getElementById('advanced-options-btn').hidden = true;
-    document.getElementById('advanced-options-sctn').hidden = false;
-});
+document
+  .getElementById("advanced-options-btn")
+  .addEventListener("click", () => {
+    document.getElementById("advanced-options-btn").hidden = true;
+    document.getElementById("advanced-options-sctn").hidden = false;
+  });
 
-document.getElementById('apply-elements-query-btn').addEventListener('click', () => {
-    const value = document.getElementById('advanced-elements-query-txtarea').value;
-    console.log(value);
+document
+  .getElementById("apply-elements-query-btn")
+  .addEventListener("click", () => {
+    const value = document.getElementById("advanced-elements-query-txtarea")
+      .value;
     createActiveTabMessenger({ advancedQuery: value }).send();
-});
+  });
+
+createActiveTabMessenger("GET_IS_CLICKSTER_ENABLED").send();
+runLoadCachedQuery();
