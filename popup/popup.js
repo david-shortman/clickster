@@ -39,6 +39,10 @@ function onSelectElementClicked() {
     window.close();
 }
 
+function runLoadCachedQuery() {
+    createActiveTabMessenger("GET_CLICKSTER_CACHED_QUERY").send();
+}
+
 document.getElementById('select-element-btn').addEventListener('click', onSelectElementClicked);
 
 createActiveTabMessenger("IS_ELEMENT_SELECTED").send();
@@ -79,8 +83,15 @@ browser.runtime.onMessage.addListener(function (message) {
             document.getElementById('clickster-start-button').style.display = 'block';
             document.getElementById('clickster-stop-button').style.display = 'none';
         }
+    } else if (!!message.clicksterCachedQuery) {
+        document.getElementById('advanced-options-btn').hidden = true;
+        document.getElementById('advanced-options-sctn').hidden = false;
+        document.getElementById('advanced-elements-query-txtarea').value = message.clicksterCachedQuery;
+
     }
 });
+
+
 
 const getTimeUntilClickMessenger = createActiveTabMessenger("GET_TIME_UNTIL_CLICK");
 setInterval(() => {
@@ -98,3 +109,4 @@ document.getElementById('apply-elements-query-btn').addEventListener('click', ()
 });
 
 createActiveTabMessenger("GET_IS_CLICKSTER_ENABLED").send();
+runLoadCachedQuery();

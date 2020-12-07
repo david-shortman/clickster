@@ -4,7 +4,15 @@ const browser = isChrome ? chrome : window["browser"];
 let clicksterEnabled = false;
 
 let isSelectionModeEnabled = false;
-let clickInterval = 3000;
+let clickInterval = localStorage.getItem('clicksterClickInterval');
+console.log('got click interval from local storage: ', clickInterval);
+if (!clickInterval) {
+  clickInterval = 3000;
+  console.log('setting clik interval to 3 seconds')
+}
+console.log('writing click interval to local storage', clickInterval);
+localStorage.setItem('clicksterClickInterval', clickInterval);
+
 let clickerId,
   timeLastClicked,
   lastHoveredElement,
@@ -163,14 +171,25 @@ function sendClickIntervalResponse() {
 }
 
 function sendIsEnabled() {
-  console.log('sending ', clicksterEnabled);
   browser.runtime.sendMessage({
     clicksterEnabled: clicksterEnabled,
   });
 }
 
+function sendCachedQueryInfo() {
+  const cachedQuery = localStorage.getItem('clicksterQuery');
+  console.log('sending cached query message: ', cachedQuery);
+  if(!!cachedQuery) {
+    browser.runtime.sendMessage({
+      clicksterCachedQuery: cachedQuery,
+    });
+  }
+}
+
 function updateClickInterval(newClickInterval) {
   clickInterval = newClickInterval * 1000;
+  console.log('writing click interval to local storage', clickInterval);
+  localStorage.setItem('clicksterClickInterval', clickInterval);
   stopClicking();
   startClicking();
 }
@@ -196,6 +215,7 @@ function manuallyClearSelectedElements() {
 }
 
 function applyQuery(query) {
+  localStorage.setItem('clicksterQuery', query);
   lastQuery = query;
   const elementSelectors = query.split("\n");
   const selectedElements = elementSelectors
@@ -235,5 +255,11 @@ browser.runtime.onMessage.addListener(function (message) {
   } else if (message === "GET_IS_CLICKSTER_ENABLED") {
     console.log('GOT IS ENABLED MESSAGE');
     sendIsEnabled();
+  } else if (message === "GET_CLICKSTER_CACHED_QUERY") {
+    sendCachedQueryInfo();
   }
 });
+
+if(!!localStorage.getItem('clicksterQuery')) {
+  applyQuery(localStorage.getItem('clicksterQuery'));
+}
