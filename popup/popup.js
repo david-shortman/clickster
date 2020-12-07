@@ -57,13 +57,14 @@ document.getElementById('clear-selection-btn').addEventListener('click', () => {
     clearSelectionMessenger.send()
     document.getElementById('no-element-selected-msg').hidden = false;
     document.getElementById('element-selected-msg').hidden = true;
+    document.getElementById('advanced-options-btn').hidden = false;
+    document.getElementById('advanced-options-sctn').hidden = true;
 });
 
 document.getElementById('clickster-start-button').addEventListener('click', startButtonClicked);
 document.getElementById('clickster-stop-button').addEventListener('click', stopButtonClicked);
 
 browser.runtime.onMessage.addListener(function (message) {
-    console.log('got a message ', message);
     if (message === "ELEMENT_IS_SELECTED") {
         document.getElementById('no-element-selected-msg').hidden = true;
         document.getElementById('element-selected-msg').hidden = false;
@@ -75,7 +76,6 @@ browser.runtime.onMessage.addListener(function (message) {
     } else if (message.clickInterval) {
         document.getElementById('click-interval-fld').value = message.clickInterval;
     } else if (message.clicksterEnabled !== null && message.clicksterEnabled !== undefined) {
-        console.log('got clickster enabled message ', message.clicksterEnabled);
         if(message.clicksterEnabled === true) {
             document.getElementById('clickster-start-button').style.display = 'none';
             document.getElementById('clickster-stop-button').style.display = 'block';

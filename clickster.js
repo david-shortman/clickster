@@ -5,12 +5,9 @@ let clicksterEnabled = false;
 
 let isSelectionModeEnabled = false;
 let clickInterval = localStorage.getItem('clicksterClickInterval');
-console.log('got click interval from local storage: ', clickInterval);
 if (!clickInterval) {
   clickInterval = 3000;
-  console.log('setting clik interval to 3 seconds')
 }
-console.log('writing click interval to local storage', clickInterval);
 localStorage.setItem('clicksterClickInterval', clickInterval);
 
 let clickerId,
@@ -178,7 +175,6 @@ function sendIsEnabled() {
 
 function sendCachedQueryInfo() {
   const cachedQuery = localStorage.getItem('clicksterQuery');
-  console.log('sending cached query message: ', cachedQuery);
   if(!!cachedQuery) {
     browser.runtime.sendMessage({
       clicksterCachedQuery: cachedQuery,
@@ -188,7 +184,6 @@ function sendCachedQueryInfo() {
 
 function updateClickInterval(newClickInterval) {
   clickInterval = newClickInterval * 1000;
-  console.log('writing click interval to local storage', clickInterval);
   localStorage.setItem('clicksterClickInterval', clickInterval);
   stopClicking();
   startClicking();
@@ -211,7 +206,7 @@ function manuallyClearSelectedElements() {
     removeSelectedHighlight(value);
     delete selectedElementsToClick[key];
   })
-  // selectedElementsToClick = null;
+  localStorage.removeItem('clicksterQuery');
 }
 
 function applyQuery(query) {
@@ -246,14 +241,11 @@ browser.runtime.onMessage.addListener(function (message) {
     applyQuery(message.advancedQuery);
   } else if(message === "STOP_CLICKING") {
     clicksterEnabled = false;
-    console.log('got stop clicking message');
     stopClicking();
   } else if (message === "START_CLICKING") {
-    console.log('got start clicking message');
     clicksterEnabled = true;
     startClicking();
   } else if (message === "GET_IS_CLICKSTER_ENABLED") {
-    console.log('GOT IS ENABLED MESSAGE');
     sendIsEnabled();
   } else if (message === "GET_CLICKSTER_CACHED_QUERY") {
     sendCachedQueryInfo();
