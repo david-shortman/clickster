@@ -17,7 +17,7 @@ function createActiveTabMessenger(message) {
           sendMessageToCurrentTab(id, message);
         });
       } else {
-        browser.tabs.query({ active: true }).then(function (currentTabs) {
+        browser.tabs.query({ currentWindow: true, active: true }).then(function (currentTabs) {
           sendMessageToCurrentTab(currentTabs[0].id, message);
         });
       }
