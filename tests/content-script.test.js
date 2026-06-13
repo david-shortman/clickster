@@ -307,4 +307,66 @@ describe("clickster content script", () => {
       expect(clicks).not.toHaveBeenCalled();
     });
   });
+
+  describe("resume toast", () => {
+    function reload() {
+      vi.clearAllTimers();
+      browser = installBrowserMock();
+      loadScript("clickster.js");
+    }
+    const toast = () => document.getElementById("clickster-resume-toast");
+
+    it("shows a sticky toast when clicking resumes after reload", () => {
+      hoverAndSelect(document.getElementById("target"));
+      browser.emit("START_CLICKING");
+      expect(toast()).toBeNull(); // not while the user is actively on the page
+
+      reload();
+      expect(toast()).not.toBeNull();
+      expect(toast().textContent).toContain("still auto-clicking");
+    });
+
+    it("does not show a toast when clicking did not resume", () => {
+      hoverAndSelect(document.getElementById("target"));
+      browser.emit("START_CLICKING");
+      browser.emit("STOP_CLICKING");
+
+      reload();
+      expect(toast()).toBeNull();
+    });
+
+    it("its Stop button halts clicking and removes the toast", () => {
+      const target = document.getElementById("target");
+      hoverAndSelect(target);
+      browser.emit("START_CLICKING");
+      reload();
+
+      document.getElementById("clickster-resume-toast-stop").click();
+      expect(toast()).toBeNull();
+
+      const clicks = countClicks(target);
+      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS * 2);
+      expect(clicks).not.toHaveBeenCalled();
+      // The stop persists, so the next reload stays quiet too.
+      reload();
+      expect(toast()).toBeNull();
+    });
+
+    it("suppresses the toast permanently after 'Don't show again'", () => {
+      hoverAndSelect(document.getElementById("target"));
+      browser.emit("START_CLICKING");
+      reload();
+
+      const link = [...toast().querySelectorAll("a")].find((a) =>
+        a.textContent.includes("Don't show again")
+      );
+      link.click();
+      expect(toast()).toBeNull();
+      expect(localStorage.getItem("clicksterHideResumeToast")).toBe("true");
+
+      // Still clicking, but the toast no longer appears on later reloads.
+      reload();
+      expect(toast()).toBeNull();
+    });
+  });
 });
