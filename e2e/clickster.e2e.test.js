@@ -155,6 +155,17 @@ describe("clickster in real Firefox", () => {
     await closePopup();
     await driver.wait(async () => (await readCount("count-one")) >= 2, 6000);
 
+    // Each click plays a pulse animation on the element (Web Animations API).
+    await driver.wait(
+      async () =>
+        (await driver.executeScript(
+          "var el = document.getElementById('one');" +
+            "return el.getAnimations ? el.getAnimations().length : 0;"
+        )) > 0,
+      6000,
+      "click did not animate"
+    );
+
     // Stop halts clicking.
     await openPopup();
     await clickPopupButton("stop-btn");

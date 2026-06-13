@@ -11,6 +11,11 @@ const DEFAULT_INTERVAL_MS = 1000;
 const SELECTED_SHADOW =
   "0 0 0 1px #b827fc, 0 0 0 2px #2c90fc, 0 0 0 3px #b8fd33, " +
   "0 0 0 4px #fec837, 0 0 0 5px #fd1892";
+// The mid-keyframe of the click pulse: the same rings, bulged outward, so each
+// click looks like the ring is soft material being pressed and springing back.
+const PRESSED_SHADOW =
+  "0 0 0 2px #b827fc, 0 0 0 4px #2c90fc, 0 0 0 7px #b8fd33, " +
+  "0 0 0 10px #fec837, 0 0 0 14px #fd1892";
 
 // Persisted so clicking survives the navigations and reloads it often triggers
 // (a click on a "next" button reloads the page). Restored on load below.
@@ -210,12 +215,20 @@ function showTarget(id) {
   }, 1200);
 }
 
-function flashClicked(target) {
-  if (!target.ref) return;
-  target.ref.style.boxShadow = "0 0 0 3px silver";
-  setTimeout(() => {
-    if (targets.indexOf(target) !== -1) displayAsSelected(target.ref);
-  }, TICK_MS);
+// A smooth "squish" on each click: the ring bulges thicker, then springs back.
+// Uses the Web Animations API so it overlays the computed style without
+// touching the inline box-shadow (and is a no-op where animate is unavailable).
+function pulseClicked(target) {
+  const element = target.ref;
+  if (!element || !element.animate) return;
+  element.animate(
+    [
+      { boxShadow: SELECTED_SHADOW },
+      { boxShadow: PRESSED_SHADOW, offset: 0.4 },
+      { boxShadow: SELECTED_SHADOW },
+    ],
+    { duration: 260, easing: "ease-out" }
+  );
 }
 
 // Keep the target pointing at the live element. When a page re-renders a node
@@ -250,7 +263,7 @@ function tick() {
       ref.click();
       target.clickCount += 1;
       target.lastClickedAt = now;
-      flashClicked(target);
+      pulseClicked(target);
     }
   });
 }

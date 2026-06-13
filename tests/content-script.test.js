@@ -211,9 +211,22 @@ describe("clickster content script", () => {
 
       vi.advanceTimersByTime(INTERVAL_MS * 2);
       expect(freshClicks).toHaveBeenCalledTimes(2);
-      // Let the per-click silver flash settle back to the rainbow ring.
-      vi.advanceTimersByTime(300);
       expect(fresh.style.boxShadow).toContain("#b827fc"); // highlight followed
+    });
+
+    it("plays a pulse animation on each click", () => {
+      const animate = vi.fn();
+      const original = Element.prototype.animate;
+      Element.prototype.animate = animate;
+      try {
+        const target = document.getElementById("target");
+        hoverAndSelect(target);
+        browser.emit("START_CLICKING");
+        vi.advanceTimersByTime(INTERVAL_MS * 2);
+        expect(animate).toHaveBeenCalledTimes(2); // one per click
+      } finally {
+        Element.prototype.animate = original;
+      }
     });
 
     it("pauses and resumes an individual target", () => {
