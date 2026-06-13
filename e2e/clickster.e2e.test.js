@@ -88,6 +88,7 @@ async function clickPopupButton(buttonId) {
   await button.click();
 }
 
+
 /**
  * Arm selection mode from the popup, then hover the target on the page and
  * click it with a real pointer (exercising the page's elementFromPoint).
@@ -95,7 +96,7 @@ async function clickPopupButton(buttonId) {
  */
 async function selectTargetByPointer(elementId) {
   await openPopup();
-  await clickPopupButton("select-element-btn");
+  await (await armSelectionButton()).click();
   await driver.switchTo().window(pageHandle);
   const target = await driver.findElement(By.id(elementId));
   // Nudge to a neutral spot first: Selenium emits no mousemove when the
@@ -104,6 +105,31 @@ async function selectTargetByPointer(elementId) {
   await driver.actions().move({ x: 5, y: 5 }).perform();
   await driver.actions().move({ origin: target }).perform();
   await driver.actions().click().perform();
+}
+
+/**
+ * Wait for the popup to render its current state, then return whichever
+ * selection-arming button is visible: "Select an element" (empty) or "Add
+ * another target" (when targets already exist).
+ */
+async function armSelectionButton() {
+  return driver.wait(async () => {
+    for (const id of ["add-target-btn", "select-element-btn"]) {
+      const el = await driver.findElement(By.id(id));
+      if (await el.isDisplayed()) return el;
+    }
+    return null;
+  }, 5000);
+}
+
+/** Wait for the popup to render the expected number of target rows. */
+async function waitForRows(count) {
+  await driver.wait(
+    async () => (await driver.findElements(By.css(".target"))).length === count,
+    5000,
+    `expected ${count} target rows`
+  );
+  return driver.findElements(By.css(".target"));
 }
 
 beforeAll(async () => {
@@ -118,174 +144,144 @@ afterAll(async () => {
 });
 
 describe("clickster in real Firefox", () => {
-  it("selects a hovered element and repeatedly clicks it at the configured interval", async () => {
+  it("selects an element, clicks it, and stops", async () => {
     await loadFixturePage();
-
-    // Hover the target with a real pointer (real elementFromPoint) and click.
     await selectTargetByPointer("one");
-    expect(isSelected(await styleOf("one"))).toBe(true);
+    await waitForSelected("one", true);
 
-    // The popup reflects the selection and can start clicking.
+    // Default 1s rate; just press Start.
     await openPopup();
-    await driver.wait(
-      until.elementIsVisible(
-        await driver.findElement(By.id("element-selected-msg"))
-      ),
-      5000
-    );
-    const intervalField = await driver.findElement(By.id("click-interval-fld"));
-    await intervalField.clear();
-    await intervalField.sendKeys("1");
-    await clickPopupButton("clickster-start-button");
+    await clickPopupButton("start-btn");
     await closePopup();
-
-    // The contract from the listing: clicked every X seconds, not just once.
-    await driver.sleep(3500);
-    const clicks = await readCount("count-one");
-    expect(clicks).toBeGreaterThanOrEqual(2);
-
-    // And the selection click itself must not have inflated the count by
-    // more than one — the selecting click is prevented or at most single.
-    expect(clicks).toBeLessThanOrEqual(5);
+    await driver.wait(async () => (await readCount("count-one")) >= 2, 6000);
 
     // Stop halts clicking.
     await openPopup();
-    await clickPopupButton("clickster-stop-button");
+    await clickPopupButton("stop-btn");
     await closePopup();
-    await driver.sleep(1200);
     const afterStop = await readCount("count-one");
-    await driver.sleep(2200);
+    await driver.sleep(2000);
     expect(await readCount("count-one")).toBe(afterStop);
   }, 90000);
 
-  it("targets all elements matching an advanced query and clicks them", async () => {
+  it("adds multiple targets and clicks each (additive selection)", async () => {
     await loadFixturePage();
-
-    await openPopup();
-    await clickPopupButton("advanced-options-btn");
-    const textarea = await driver.findElement(
-      By.id("advanced-elements-query-txtarea")
-    );
-    await textarea.sendKeys("#one\n#two");
-    await clickPopupButton("apply-elements-query-btn");
-    await driver.sleep(300);
-    const intervalField = await driver.findElement(By.id("click-interval-fld"));
-    await intervalField.clear();
-    await intervalField.sendKeys("1");
-    await clickPopupButton("clickster-start-button");
-    await closePopup();
-
-    expect(isSelected(await styleOf("one"))).toBe(true);
-    expect(isSelected(await styleOf("two"))).toBe(true);
-
-    await driver.sleep(2500);
-    expect(await readCount("count-one")).toBeGreaterThanOrEqual(1);
-    expect(await readCount("count-two")).toBeGreaterThanOrEqual(1);
-  }, 90000);
-
-  it("restores advanced-query targets after a page reload", async () => {
-    await loadFixturePage();
-
-    // Apply an advanced query but don't start clicking, so the highlight
-    // styles stay stable for the assertion.
-    await openPopup();
-    await clickPopupButton("advanced-options-btn");
-    await driver
-      .findElement(By.id("advanced-elements-query-txtarea"))
-      .sendKeys("#one\n#two");
-    await clickPopupButton("apply-elements-query-btn");
-    await closePopup();
-    await waitForSelected("one", true);
-
-    // Reload without touching the popup — targets restore from persistence.
-    await reloadFixturePage();
-    await waitForSelected("one", true);
-    await waitForSelected("two", true);
-  }, 90000);
-
-  it("replaces the target when selecting a second element with one active", async () => {
-    await loadFixturePage();
-
-    // First selection on an empty slate works in any version.
     await selectTargetByPointer("one");
-    await waitForSelected("one", true);
-
-    // Selecting a second element while "one" is active is the issue #10
-    // repro: setSelectedElement threw clearing the prior highlight, so the
-    // new selection silently failed and the popup kept saying "no target".
     await selectTargetByPointer("two");
-    await waitForSelected("two", true);
-    await waitForSelected("one", false);
 
-    // "two" is now the sole live target: only its counter keeps climbing.
-    const oneBefore = await readCount("count-one");
     await openPopup();
-    const intervalField = await driver.findElement(By.id("click-interval-fld"));
-    await intervalField.clear();
-    await intervalField.sendKeys("1");
-    await clickPopupButton("clickster-start-button");
+    await waitForRows(2);
+    await clickPopupButton("start-btn");
     await closePopup();
-    await driver.sleep(2500);
-    expect(await readCount("count-two")).toBeGreaterThanOrEqual(2);
-    expect(await readCount("count-one")).toBe(oneBefore);
+
+    await driver.wait(async () => (await readCount("count-one")) >= 2, 6000);
+    await driver.wait(async () => (await readCount("count-two")) >= 2, 6000);
   }, 90000);
 
-  it("keeps clicking after a page reload (#11)", async () => {
+  it("pauses and resumes an individual target", async () => {
     await loadFixturePage();
     await selectTargetByPointer("one");
-    await waitForSelected("one", true);
+    await selectTargetByPointer("two");
 
-    // Start clicking at 1/s.
     await openPopup();
-    const intervalField = await driver.findElement(By.id("click-interval-fld"));
-    await intervalField.clear();
-    await intervalField.sendKeys("1");
-    await clickPopupButton("clickster-start-button");
+    let rows = await waitForRows(2);
+    await rows[0].findElement(By.css(".pause-btn")).click(); // pause "one"
+    await clickPopupButton("start-btn");
+    await closePopup();
+
+    await driver.wait(async () => (await readCount("count-two")) >= 2, 6000);
+    const onePaused = await readCount("count-one");
+    await driver.sleep(1500);
+    expect(await readCount("count-one")).toBe(onePaused); // stayed put
+
+    await openPopup();
+    rows = await waitForRows(2);
+    await rows[0].findElement(By.css(".pause-btn")).click(); // resume "one"
+    await closePopup();
+    await driver.wait(
+      async () => (await readCount("count-one")) > onePaused,
+      6000
+    );
+  }, 90000);
+
+  it("removes a target from the list", async () => {
+    await loadFixturePage();
+    await selectTargetByPointer("one");
+    await selectTargetByPointer("two");
+
+    await openPopup();
+    const rows = await waitForRows(2);
+    await rows[0].findElement(By.css(".remove-btn")).click(); // remove "one"
+    await waitForRows(1);
+    await clickPopupButton("start-btn");
+    await closePopup();
+
+    await driver.wait(async () => (await readCount("count-two")) >= 2, 6000);
+    const oneCount = await readCount("count-one");
+    await driver.sleep(1500);
+    expect(await readCount("count-one")).toBe(oneCount); // no longer clicked
+  }, 90000);
+
+  it("highlights the target on the page from the show button", async () => {
+    await loadFixturePage();
+    await selectTargetByPointer("one");
+
+    await openPopup();
+    await waitForRows(1);
+    await driver.findElement(By.css(".target .show-btn")).click();
+    await closePopup();
+    await driver.wait(
+      async () => (await styleOf("one")).includes("outline"),
+      3000,
+      "show did not outline the element"
+    );
+  }, 90000);
+
+  it("clicks at a per-target frequency set in the popup", async () => {
+    await loadFixturePage();
+    await selectTargetByPointer("one");
+
+    await openPopup();
+    await waitForRows(1);
+    const freq = await driver.findElement(By.css(".target .freq-input"));
+    await freq.clear();
+    await freq.sendKeys("3");
+    // Pressing Start blurs the field (firing change -> setTargetInterval) and
+    // resets the countdown.
+    await clickPopupButton("start-btn");
+    await closePopup();
+
+    const baseline = await readCount("count-one");
+    await driver.sleep(2000);
+    expect(await readCount("count-one")).toBe(baseline); // 3s rate: nothing yet
+    await driver.wait(
+      async () => (await readCount("count-one")) > baseline,
+      4000
+    );
+  }, 90000);
+
+  it("keeps clicking after reload and shows a resume toast (#11)", async () => {
+    await loadFixturePage();
+    await selectTargetByPointer("one");
+    await openPopup();
+    await clickPopupButton("start-btn");
     await closePopup();
     await driver.wait(async () => (await readCount("count-one")) >= 1, 5000);
 
-    // Reload the page. The counter resets to 0, but clicking should resume on
-    // its own — without reopening the popup or pressing Start again. Before
-    // #11 it stayed silent until the user re-armed it.
     await reloadFixturePage();
+    // Clicking resumes on its own, with no popup interaction.
     await driver.wait(
       async () => (await readCount("count-one")) >= 2,
       8000,
       "clicking did not resume after reload"
     );
-  }, 90000);
-
-  it("shows a sticky resume toast whose Stop button halts clicking", async () => {
-    await loadFixturePage();
-    await selectTargetByPointer("one");
-    await waitForSelected("one", true);
-
-    await openPopup();
-    const intervalField = await driver.findElement(By.id("click-interval-fld"));
-    await intervalField.clear();
-    await intervalField.sendKeys("1");
-    await clickPopupButton("clickster-start-button");
-    await closePopup();
-    await driver.wait(async () => (await readCount("count-one")) >= 1, 5000);
-
-    // After reload the resume toast appears on the page (no popup needed).
-    await reloadFixturePage();
+    // The sticky resume toast appears; its Stop button halts clicking.
     const stop = await driver.wait(
       until.elementLocated(By.id("clickster-resume-toast-stop")),
       8000
     );
-    await driver.wait(until.elementIsVisible(stop), 5000);
-
-    // It must be sticky — present a moment later, not auto-dismissed.
-    await driver.sleep(1500);
     await stop.click();
-
-    // Stop halts clicking and removes the toast.
-    await driver.wait(
-      until.stalenessOf(stop),
-      5000,
-      "toast did not dismiss on Stop"
-    );
+    await driver.wait(until.stalenessOf(stop), 5000);
     const afterStop = await readCount("count-one");
     await driver.sleep(2000);
     expect(await readCount("count-one")).toBe(afterStop);

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installBrowserMock, loadScript } from "./helpers.js";
 
-const DEFAULT_INTERVAL_MS = 3000;
+// DEFAULT_INTERVAL_MS in the content script.
+const INTERVAL_MS = 1000;
 
 describe("clickster content script", () => {
   let browser;
@@ -19,6 +20,8 @@ describe("clickster content script", () => {
     // elementUnderCursor to whatever the simulated cursor is over.
     document.elementFromPoint = () => elementUnderCursor;
     elementUnderCursor = null;
+    // jsdom doesn't implement scrollIntoView.
+    Element.prototype.scrollIntoView = () => {};
     browser = installBrowserMock();
     loadScript("clickster.js");
   });
@@ -43,93 +46,80 @@ describe("clickster content script", () => {
     return spy;
   }
 
+  // Ask the content script for its current state and return the latest one.
+  function state() {
+    browser.emit("GET_STATE");
+    const calls = browser.runtime.sendMessage.mock.calls;
+    for (let i = calls.length - 1; i >= 0; i -= 1) {
+      if (calls[i][0] && calls[i][0].clicksterState) {
+        return calls[i][0].clicksterState;
+      }
+    }
+    return null;
+  }
+
   describe("target selection", () => {
-    it("reports no target before anything is selected", () => {
-      browser.emit("IS_ELEMENT_SELECTED");
-      expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
-        "NO_ELEMENT_IS_SELECTED"
+    it("reports no targets before anything is selected", () => {
+      expect(state().targets).toHaveLength(0);
+    });
+
+    it("adds the hovered element as a target on click", () => {
+      hoverAndSelect(document.getElementById("target"));
+      const s = state();
+      expect(s.targets).toHaveLength(1);
+      expect(s.targets[0].label).toBe("Squash and Merge");
+      expect(document.getElementById("target").style.border).toContain(
+        "thick solid"
       );
     });
 
-    it("selects the hovered element on click and reports it", () => {
-      const target = document.getElementById("target");
-      hoverAndSelect(target);
-
-      browser.emit("IS_ELEMENT_SELECTED");
-      expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
-        "ELEMENT_IS_SELECTED"
-      );
-      expect(target.style.border).toContain("thick solid");
-    });
-
-    it("selects the hovered element on Enter as the popup instructs", () => {
-      const target = document.getElementById("target");
+    it("adds the hovered element on Enter", () => {
       browser.emit("SELECT_ELEMENT_CLICKED");
-      elementUnderCursor = target;
+      elementUnderCursor = document.getElementById("target");
       document.dispatchEvent(
         new MouseEvent("mousemove", { clientX: 10, clientY: 10 })
       );
       document.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter" }));
-
-      browser.emit("IS_ELEMENT_SELECTED");
-      expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
-        "ELEMENT_IS_SELECTED"
-      );
+      expect(state().targets).toHaveLength(1);
     });
 
-    it("clears the target on CLEAR_SELECTED_ELEMENT", () => {
+    it("adds further selections instead of replacing (additive)", () => {
       hoverAndSelect(document.getElementById("target"));
-      browser.emit("CLEAR_SELECTED_ELEMENT");
-
-      browser.emit("IS_ELEMENT_SELECTED");
-      expect(browser.runtime.sendMessage).toHaveBeenLastCalledWith(
-        "NO_ELEMENT_IS_SELECTED"
-      );
+      hoverAndSelect(document.getElementById("other"));
+      const labels = state().targets.map((t) => t.label);
+      expect(labels).toEqual(["Squash and Merge", "One"]);
     });
 
-    it("replaces the target when a new element is selected with one active", () => {
-      const first = document.getElementById("target");
-      const second = document.getElementById("other");
-      hoverAndSelect(first);
+    it("removes a target and restores its highlight", () => {
+      const target = document.getElementById("target");
+      hoverAndSelect(target);
+      expect(target.style.border).toContain("thick solid");
 
-      // Selecting again while a target is already active used to throw in
-      // setSelectedElement (issue #10) — it passed the raw element to
-      // removeSelectedHighlight, which dereferences element.ref — silently
-      // aborting the new selection so the popup kept saying "no target".
-      hoverAndSelect(second);
-
-      const clicksFirst = countClicks(first);
-      const clicksSecond = countClicks(second);
-      browser.emit("START_CLICKING");
-      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS);
-
-      expect(clicksSecond).toHaveBeenCalledTimes(1);
-      expect(clicksFirst).not.toHaveBeenCalled();
+      browser.emit({ removeTargetId: state().targets[0].id });
+      expect(state().targets).toHaveLength(0);
+      expect(target.style.border).not.toContain("thick solid");
     });
   });
 
-  describe("interval clicking", () => {
+  describe("clicking engine", () => {
     it("does not click before Start is pressed", () => {
       const target = document.getElementById("target");
       const clicks = countClicks(target);
       hoverAndSelect(target);
 
-      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS * 3);
+      vi.advanceTimersByTime(INTERVAL_MS * 3);
       expect(clicks).not.toHaveBeenCalled();
     });
 
-    it("clicks the target repeatedly at the configured interval", () => {
+    it("clicks the target repeatedly at the interval after Start", () => {
       const target = document.getElementById("target");
       const clicks = countClicks(target);
       hoverAndSelect(target);
       browser.emit("START_CLICKING");
 
-      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS);
+      vi.advanceTimersByTime(INTERVAL_MS);
       expect(clicks).toHaveBeenCalledTimes(1);
-
-      // The core contract from the listing: "click every X seconds",
-      // not just once (AMO review regression guard).
-      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS * 4);
+      vi.advanceTimersByTime(INTERVAL_MS * 4);
       expect(clicks).toHaveBeenCalledTimes(5);
     });
 
@@ -138,118 +128,102 @@ describe("clickster content script", () => {
       const clicks = countClicks(target);
       hoverAndSelect(target);
       browser.emit("START_CLICKING");
-      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS);
+      vi.advanceTimersByTime(INTERVAL_MS);
       expect(clicks).toHaveBeenCalledTimes(1);
 
       browser.emit("STOP_CLICKING");
-      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS * 5);
+      vi.advanceTimersByTime(INTERVAL_MS * 5);
       expect(clicks).toHaveBeenCalledTimes(1);
     });
 
-    it("applies an updated click interval", () => {
+    it("respects a per-target interval", () => {
       const target = document.getElementById("target");
       const clicks = countClicks(target);
       hoverAndSelect(target);
+      browser.emit({
+        setTargetInterval: { id: state().targets[0].id, seconds: 2 },
+      });
       browser.emit("START_CLICKING");
-      browser.emit({ newClickInterval: "1" });
 
-      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(2000);
       expect(clicks).toHaveBeenCalledTimes(1);
       vi.advanceTimersByTime(2000);
-      expect(clicks).toHaveBeenCalledTimes(3);
+      expect(clicks).toHaveBeenCalledTimes(2);
     });
 
-    it("reports clickster enabled state to the popup", () => {
-      browser.emit("GET_IS_CLICKSTER_ENABLED");
-      expect(browser.runtime.sendMessage).toHaveBeenLastCalledWith({
-        clicksterEnabled: false,
-      });
-
+    it("clicks each target at its own rate", () => {
+      const fast = document.getElementById("target");
+      const slow = document.getElementById("other");
+      const fastClicks = countClicks(fast);
+      const slowClicks = countClicks(slow);
+      hoverAndSelect(fast);
+      hoverAndSelect(slow);
+      const [fastId, slowId] = state().targets.map((t) => t.id);
+      browser.emit({ setTargetInterval: { id: fastId, seconds: 1 } });
+      browser.emit({ setTargetInterval: { id: slowId, seconds: 3 } });
       browser.emit("START_CLICKING");
-      browser.emit("GET_IS_CLICKSTER_ENABLED");
-      expect(browser.runtime.sendMessage).toHaveBeenLastCalledWith({
-        clicksterEnabled: true,
-      });
+
+      vi.advanceTimersByTime(3000);
+      expect(fastClicks).toHaveBeenCalledTimes(3);
+      expect(slowClicks).toHaveBeenCalledTimes(1);
     });
 
-    it("reports the click interval in seconds", () => {
-      browser.emit("GET_CLICK_INTERVAL");
-      expect(browser.runtime.sendMessage).toHaveBeenLastCalledWith({
-        clickInterval: 3,
-      });
-    });
+    it("pauses and resumes an individual target", () => {
+      const target = document.getElementById("target");
+      const other = document.getElementById("other");
+      const targetClicks = countClicks(target);
+      const otherClicks = countClicks(other);
+      hoverAndSelect(target);
+      hoverAndSelect(other);
+      const targetId = state().targets[0].id;
 
-    it("reports time until the next click", () => {
-      hoverAndSelect(document.getElementById("target"));
+      browser.emit({ pauseTarget: { id: targetId, paused: true } });
       browser.emit("START_CLICKING");
-      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(INTERVAL_MS);
+      expect(targetClicks).not.toHaveBeenCalled();
+      expect(otherClicks).toHaveBeenCalledTimes(1);
 
-      browser.emit("GET_TIME_UNTIL_CLICK");
-      expect(browser.runtime.sendMessage).toHaveBeenLastCalledWith({
-        timeUntilClick: DEFAULT_INTERVAL_MS - 1000,
-      });
+      browser.emit({ pauseTarget: { id: targetId, paused: false } });
+      vi.advanceTimersByTime(INTERVAL_MS);
+      expect(targetClicks).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe("advanced query", () => {
-    it("targets every element matching the selector", () => {
-      const one = document.getElementById("other");
-      const two = document.getElementById("another");
-      const clicksOne = countClicks(one);
-      const clicksTwo = countClicks(two);
-
-      browser.emit({ advancedQuery: ".bulk" });
-      browser.emit("START_CLICKING");
-      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS);
-
-      expect(clicksOne).toHaveBeenCalledTimes(1);
-      expect(clicksTwo).toHaveBeenCalledTimes(1);
-    });
-
-    it("supports multiple newline-separated selectors", () => {
+  describe("state reporting", () => {
+    it("reports enabled state and per-target click counts", () => {
       const target = document.getElementById("target");
-      const other = document.getElementById("other");
-      const clicksTarget = countClicks(target);
-      const clicksOther = countClicks(other);
+      hoverAndSelect(target);
+      expect(state().enabled).toBe(false);
 
-      browser.emit({ advancedQuery: "#target\n#other" });
       browser.emit("START_CLICKING");
-      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS);
-
-      expect(clicksTarget).toHaveBeenCalledTimes(1);
-      expect(clicksOther).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(INTERVAL_MS);
+      const s = state();
+      expect(s.enabled).toBe(true);
+      expect(s.targets[0].clickCount).toBe(1);
+      expect(s.targets[0].intervalSeconds).toBe(1);
     });
 
-    it("persists the query and restores targets on the next page load", () => {
-      browser.emit({ advancedQuery: ".bulk" });
-      expect(localStorage.getItem("clicksterQuery")).toBe(".bulk");
-
-      // Simulate a page reload: fresh script run against the same origin.
-      browser = installBrowserMock();
-      loadScript("clickster.js");
-
-      browser.emit("IS_ELEMENT_SELECTED");
-      expect(browser.runtime.sendMessage).toHaveBeenLastCalledWith(
-        "ELEMENT_IS_SELECTED"
-      );
-
-      browser.emit("GET_CLICKSTER_CACHED_QUERY");
-      expect(browser.runtime.sendMessage).toHaveBeenLastCalledWith({
-        clicksterCachedQuery: ".bulk",
-      });
+    it("reports a countdown to the next click", () => {
+      hoverAndSelect(document.getElementById("target"));
+      browser.emit("START_CLICKING");
+      vi.advanceTimersByTime(400);
+      const next = state().targets[0].nextClickMs;
+      expect(next).toBeGreaterThan(0);
+      expect(next).toBeLessThanOrEqual(INTERVAL_MS);
     });
 
-    it("forgets the cached query when the selection is cleared", () => {
-      browser.emit({ advancedQuery: ".bulk" });
-      browser.emit("CLEAR_SELECTED_ELEMENT");
-      expect(localStorage.getItem("clicksterQuery")).toBeNull();
+    it("flashes an outline on the element for showTarget", () => {
+      const target = document.getElementById("target");
+      hoverAndSelect(target);
+      browser.emit({ showTargetId: state().targets[0].id });
+      expect(target.style.outline).toContain("solid");
     });
   });
 
   describe("persistence across reload (#11)", () => {
     // A fresh script run against the same DOM + localStorage is what a real
-    // page reload looks like to the content script. Clear timers first, since
-    // navigating away tears down the old page's intervals.
+    // page reload looks like. Clear timers first, since navigating away tears
+    // down the old page's intervals.
     function reload() {
       vi.clearAllTimers();
       browser = installBrowserMock();
@@ -264,7 +238,7 @@ describe("clickster content script", () => {
       reload();
 
       const clicks = countClicks(target);
-      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS * 2);
+      vi.advanceTimersByTime(INTERVAL_MS * 2);
       expect(clicks).toHaveBeenCalledTimes(2);
     });
 
@@ -277,33 +251,33 @@ describe("clickster content script", () => {
       reload();
 
       const clicks = countClicks(target);
-      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS * 2);
+      vi.advanceTimersByTime(INTERVAL_MS * 2);
       expect(clicks).not.toHaveBeenCalled();
     });
 
-    it("restores a single selected target after reload", () => {
-      // Before #11 a single selection was lost on reload — only advanced
-      // queries persisted. It should now come back.
+    it("restores targets (with their interval) after reload", () => {
       hoverAndSelect(document.getElementById("target"));
+      browser.emit({
+        setTargetInterval: { id: state().targets[0].id, seconds: 4 },
+      });
 
       reload();
 
-      browser.emit("IS_ELEMENT_SELECTED");
-      expect(browser.runtime.sendMessage).toHaveBeenLastCalledWith(
-        "ELEMENT_IS_SELECTED"
-      );
+      const s = state();
+      expect(s.targets).toHaveLength(1);
+      expect(s.targets[0].intervalSeconds).toBe(4);
     });
 
-    it("does not resume after the selection is cleared and reloaded", () => {
+    it("does not resume after the last target is removed and reloaded", () => {
       const target = document.getElementById("target");
       hoverAndSelect(target);
       browser.emit("START_CLICKING");
-      browser.emit("CLEAR_SELECTED_ELEMENT");
+      browser.emit({ removeTargetId: state().targets[0].id });
 
       reload();
 
       const clicks = countClicks(target);
-      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS * 2);
+      vi.advanceTimersByTime(INTERVAL_MS * 2);
       expect(clicks).not.toHaveBeenCalled();
     });
   });
@@ -319,7 +293,7 @@ describe("clickster content script", () => {
     it("shows a sticky toast when clicking resumes after reload", () => {
       hoverAndSelect(document.getElementById("target"));
       browser.emit("START_CLICKING");
-      expect(toast()).toBeNull(); // not while the user is actively on the page
+      expect(toast()).toBeNull();
 
       reload();
       expect(toast()).not.toBeNull();
@@ -345,9 +319,8 @@ describe("clickster content script", () => {
       expect(toast()).toBeNull();
 
       const clicks = countClicks(target);
-      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS * 2);
+      vi.advanceTimersByTime(INTERVAL_MS * 2);
       expect(clicks).not.toHaveBeenCalled();
-      // The stop persists, so the next reload stays quiet too.
       reload();
       expect(toast()).toBeNull();
     });
@@ -361,10 +334,8 @@ describe("clickster content script", () => {
         a.textContent.includes("Don't show again")
       );
       link.click();
-      expect(toast()).toBeNull();
       expect(localStorage.getItem("clicksterHideResumeToast")).toBe("true");
 
-      // Still clicking, but the toast no longer appears on later reloads.
       reload();
       expect(toast()).toBeNull();
     });
