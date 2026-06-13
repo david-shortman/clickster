@@ -90,6 +90,24 @@ describe("clickster content script", () => {
       expect(labels).toEqual(["Squash and Merge", "One"]);
     });
 
+    it("clears the hover highlight when the cursor crosses the background", () => {
+      const a = document.getElementById("target");
+      browser.emit("SELECT_ELEMENT_CLICKED");
+
+      elementUnderCursor = a;
+      document.dispatchEvent(
+        new MouseEvent("mousemove", { clientX: 10, clientY: 10 })
+      );
+      expect(a.style.border).toContain("red");
+
+      // Move onto the page background (a gap between elements).
+      elementUnderCursor = document.body;
+      document.dispatchEvent(
+        new MouseEvent("mousemove", { clientX: 11, clientY: 11 })
+      );
+      expect(a.style.border).not.toContain("red");
+    });
+
     it("removes a target and restores its highlight", () => {
       const target = document.getElementById("target");
       hoverAndSelect(target);

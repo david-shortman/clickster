@@ -117,7 +117,7 @@ function updateRow(row, target) {
   row.querySelector(".count").textContent = target.clickCount + " clicks";
   row.querySelector(".countdown").textContent = target.paused
     ? "paused"
-    : "next in " + Math.ceil((target.nextClickMs || 0) / 1000) + "s";
+    : "next in " + ((target.nextClickMs || 0) / 1000).toFixed(1) + "s";
   const pauseBtn = row.querySelector(".pause-btn");
   pauseBtn.textContent = target.paused ? "\u25B6" : "\u23F8";
   pauseBtn.title = target.paused ? "Resume" : "Pause";
@@ -160,4 +160,5 @@ browser.runtime.onMessage.addListener(function (message) {
 });
 
 send("GET_STATE");
-setInterval(() => send("GET_STATE"), 400);
+// Poll often enough that the tenths-of-a-second countdown moves smoothly.
+setInterval(() => send("GET_STATE"), 250);

@@ -43,16 +43,21 @@ document.addEventListener("mousemove", (event) => {
 
   if (isSelectionModeEnabled) {
     const elementMouseIsOver = document.elementFromPoint(clientX, clientY);
-    if (
-      elementMouseIsOver !== document.body &&
-      lastHoveredElement !== elementMouseIsOver
-    ) {
+    if (lastHoveredElement !== elementMouseIsOver) {
+      // Always clear the previously highlighted element first — including when
+      // moving onto the page background — so red borders aren't left behind in
+      // the gaps between elements.
       removeHoverHighlight(lastHoveredElement);
-      shouldNextClickSelectAnElement = true;
-      lastHoveredElementBorder = elementMouseIsOver.style.border;
-      elementMouseIsOver.style.border = "thin solid red";
+      if (elementMouseIsOver && elementMouseIsOver !== document.body) {
+        shouldNextClickSelectAnElement = true;
+        lastHoveredElementBorder = elementMouseIsOver.style.border;
+        elementMouseIsOver.style.border = "thin solid red";
+        lastHoveredElement = elementMouseIsOver;
+      } else {
+        shouldNextClickSelectAnElement = false;
+        lastHoveredElement = null;
+      }
     }
-    lastHoveredElement = elementMouseIsOver;
   }
 });
 
@@ -289,7 +294,9 @@ function sendState() {
         paused: t.paused,
         nextClickMs: t.paused
           ? null
-          : Math.max(0, t.intervalMs - (now - t.lastClickedAt)),
+          : clicksterEnabled
+          ? Math.max(0, t.intervalMs - (now - t.lastClickedAt))
+          : t.intervalMs,
       })),
     },
   });
