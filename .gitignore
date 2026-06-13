@@ -1,3 +1,5 @@
 node_modules/
 dist/
 web-ext-artifacts/
+e2e/.cache/
+research/

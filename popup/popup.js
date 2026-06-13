@@ -3,6 +3,11 @@ const isChrome = !window["browser"] && !!chrome;
 const browser = isChrome ? chrome : window["browser"];
 clicksterEnabled = false;
 
+// E2E test hook: WebDriver can't open the real browser-action popup, so tests
+// load this page as a tab with ?tabId=<target> to pin which tab gets messaged.
+// Absent in normal popup usage, where there is no query string.
+const testTabId = new URLSearchParams(window.location.search).get("tabId");
+
 function sendMessageToCurrentTab(currentTabId, message) {
   if (currentTabId >= 0) {
     browser.tabs.sendMessage(currentTabId, message);
@@ -12,7 +17,9 @@ function sendMessageToCurrentTab(currentTabId, message) {
 function createActiveTabMessenger(message) {
   return {
     send: function () {
-      if (isChrome) {
+      if (testTabId !== null) {
+        sendMessageToCurrentTab(Number(testTabId), message);
+      } else if (isChrome) {
         browser.tabs.getSelected(function ({ id }) {
           sendMessageToCurrentTab(id, message);
         });

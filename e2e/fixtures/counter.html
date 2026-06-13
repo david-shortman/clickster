@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Clickster E2E fixture</title>
+    <style>
+      button {
+        display: block;
+        width: 300px;
+        height: 60px;
+        margin: 20px;
+        font-size: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="one">Button One (<span id="count-one">0</span>)</button>
+    <button id="two">Button Two (<span id="count-two">0</span>)</button>
+    <script>
+      let one = 0;
+      let two = 0;
+      document.getElementById("one").addEventListener("click", () => {
+        one += 1;
+        document.getElementById("count-one").textContent = String(one);
+      });
+      document.getElementById("two").addEventListener("click", () => {
+        two += 1;
+        document.getElementById("count-two").textContent = String(two);
+      });
+    </script>
+  </body>
+</html>

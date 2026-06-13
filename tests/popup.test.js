@@ -147,3 +147,24 @@ describe("clickster popup", () => {
     ]);
   });
 });
+
+describe("clickster popup e2e hook", () => {
+  it("pins messaging to the tab named by ?tabId instead of querying", async () => {
+    window.history.replaceState(null, "", "/popup.html?tabId=42");
+    try {
+      document.body.innerHTML = readPopupHtml();
+      window.close = vi.fn();
+      const browser = installBrowserMock({ activeTabId: TAB_ID });
+      loadScript("popup/popup.js");
+      await flushMicrotasks();
+
+      expect(browser.tabs.query).not.toHaveBeenCalled();
+      expect(browser.tabs.sendMessage.mock.calls).toContainEqual([
+        42,
+        "IS_ELEMENT_SELECTED",
+      ]);
+    } finally {
+      window.history.replaceState(null, "", "/popup.html");
+    }
+  });
+});
