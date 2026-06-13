@@ -254,4 +254,40 @@ describe("clickster in real Firefox", () => {
       "clicking did not resume after reload"
     );
   }, 90000);
+
+  it("shows a sticky resume toast whose Stop button halts clicking", async () => {
+    await loadFixturePage();
+    await selectTargetByPointer("one");
+    await waitForSelected("one", true);
+
+    await openPopup();
+    const intervalField = await driver.findElement(By.id("click-interval-fld"));
+    await intervalField.clear();
+    await intervalField.sendKeys("1");
+    await clickPopupButton("clickster-start-button");
+    await closePopup();
+    await driver.wait(async () => (await readCount("count-one")) >= 1, 5000);
+
+    // After reload the resume toast appears on the page (no popup needed).
+    await reloadFixturePage();
+    const stop = await driver.wait(
+      until.elementLocated(By.id("clickster-resume-toast-stop")),
+      8000
+    );
+    await driver.wait(until.elementIsVisible(stop), 5000);
+
+    // It must be sticky — present a moment later, not auto-dismissed.
+    await driver.sleep(1500);
+    await stop.click();
+
+    // Stop halts clicking and removes the toast.
+    await driver.wait(
+      until.stalenessOf(stop),
+      5000,
+      "toast did not dismiss on Stop"
+    );
+    const afterStop = await readCount("count-one");
+    await driver.sleep(2000);
+    expect(await readCount("count-one")).toBe(afterStop);
+  }, 90000);
 });

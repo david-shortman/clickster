@@ -285,6 +285,76 @@ function applyQuery(query) {
   startClicking();
 }
 
+function dismissResumeToast() {
+  const existing = document.getElementById("clickster-resume-toast");
+  if (existing) {
+    existing.remove();
+  }
+}
+
+// Sticky on-page banner shown when clicking silently resumes after a reload,
+// so it's never a mystery why a page is clicking itself. Stays until the user
+// acts (it is not auto-dismissed).
+function showResumeToast() {
+  if (localStorage.getItem("clicksterHideResumeToast") === "true") return;
+  if (!document.body || document.getElementById("clickster-resume-toast")) {
+    return;
+  }
+
+  const toast = document.createElement("div");
+  toast.id = "clickster-resume-toast";
+  toast.setAttribute("role", "status");
+  toast.style.cssText =
+    "position:fixed;bottom:16px;right:16px;z-index:2147483647;max-width:320px;" +
+    "padding:14px 16px;background:#160644;color:#f4f0ff;border:2px solid #b8fd33;" +
+    "border-radius:10px;font-family:Helvetica,Arial,sans-serif;font-size:13px;" +
+    "line-height:1.4;box-shadow:0 6px 24px rgba(0,0,0,0.4)";
+
+  const message = document.createElement("div");
+  message.textContent = "Clickster is still auto-clicking on this page.";
+  message.style.cssText = "margin-bottom:10px;font-weight:bold";
+
+  const actions = document.createElement("div");
+  actions.style.cssText = "display:flex;gap:8px;align-items:center";
+
+  const stopButton = document.createElement("button");
+  stopButton.id = "clickster-resume-toast-stop";
+  stopButton.textContent = "Stop";
+  stopButton.style.cssText =
+    "background:#bf16ab;color:#fff;border:none;border-radius:5px;" +
+    "padding:6px 12px;font-size:13px;cursor:pointer";
+  stopButton.addEventListener("click", () => {
+    setClicksterEnabled(false);
+    stopClicking();
+    dismissResumeToast();
+  });
+
+  const keepButton = document.createElement("button");
+  keepButton.textContent = "Keep clicking";
+  keepButton.style.cssText =
+    "background:transparent;color:#cfc8f5;border:1px solid rgba(255,255,255,0.3);" +
+    "border-radius:5px;padding:6px 12px;font-size:13px;cursor:pointer";
+  keepButton.addEventListener("click", dismissResumeToast);
+
+  const hideLink = document.createElement("a");
+  hideLink.textContent = "Don't show again";
+  hideLink.href = "#";
+  hideLink.style.cssText =
+    "color:#9189c0;font-size:12px;margin-left:auto;text-decoration:underline;cursor:pointer";
+  hideLink.addEventListener("click", (event) => {
+    event.preventDefault();
+    localStorage.setItem("clicksterHideResumeToast", "true");
+    dismissResumeToast();
+  });
+
+  actions.appendChild(stopButton);
+  actions.appendChild(keepButton);
+  actions.appendChild(hideLink);
+  toast.appendChild(message);
+  toast.appendChild(actions);
+  document.body.appendChild(toast);
+}
+
 // Re-resolve persisted target selectors after a page load and resume clicking
 // if it was running. This is what makes clicking survive a reload (issue #11).
 function restoreTargets() {
@@ -315,6 +385,9 @@ function restoreTargets() {
   });
   if (Object.keys(selectedElementsToClick).length > 0) {
     startClicking();
+    if (clicksterEnabled) {
+      showResumeToast();
+    }
   }
 }
 
