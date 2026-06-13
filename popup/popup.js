@@ -63,7 +63,7 @@ function buildRow(target) {
 
   const showBtn = document.createElement("button");
   showBtn.className = "icon-btn show-btn";
-  showBtn.textContent = "👁";
+  showBtn.textContent = "\u{1F441}";
   showBtn.title = "Show on page";
   showBtn.setAttribute("aria-label", "Show on page");
   showBtn.addEventListener("click", () => send({ showTargetId: target.id }));
@@ -78,7 +78,7 @@ function buildRow(target) {
 
   const removeBtn = document.createElement("button");
   removeBtn.className = "icon-btn remove-btn";
-  removeBtn.textContent = "✕";
+  removeBtn.textContent = "\u2715";
   removeBtn.title = "Remove";
   removeBtn.setAttribute("aria-label", "Remove target");
   removeBtn.addEventListener("click", () => send({ removeTargetId: target.id }));
@@ -119,7 +119,7 @@ function updateRow(row, target) {
     ? "paused"
     : "next in " + Math.ceil((target.nextClickMs || 0) / 1000) + "s";
   const pauseBtn = row.querySelector(".pause-btn");
-  pauseBtn.textContent = target.paused ? "▶" : "⏸";
+  pauseBtn.textContent = target.paused ? "\u25B6" : "\u23F8";
   pauseBtn.title = target.paused ? "Resume" : "Pause";
   pauseBtn.setAttribute("aria-label", target.paused ? "Resume" : "Pause");
   // Don't clobber the field while the user is editing it.
