@@ -1,0 +1,17 @@
+{
+  "name": "clickster",
+  "version": "1.1.1",
+  "private": true,
+  "description": "Dev tooling for the Clickster web extension. The extension itself is plain JS with no build step.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "web-ext lint --source-dir . --ignore-files 'dist/**' 'node_modules/**' 'tests/**' '.github/**' 'promo*.png' 'example.gif' 'test.html' '.prettierrc' '.gitattributes' 'PRIVACY_POLICY.md' 'README.md' 'package.json' 'package-lock.json' 'vitest.config.js'",
+    "build": "mkdir -p dist && rm -f dist/clickster.zip && zip -r dist/clickster.zip manifest.json clickster.js popup icons LICENSE"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0",
+    "vitest": "^3.1.1",
+    "web-ext": "^8.7.1"
+  }
+}
