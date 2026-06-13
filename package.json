@@ -4,10 +4,11 @@
   "private": true,
   "description": "Dev tooling for the Clickster web extension. The extension itself is plain JS with no build step.",
   "scripts": {
+    "dev": "node tools/dev.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npm run build && vitest run --config vitest.e2e.config.js",
-    "lint": "web-ext lint --source-dir . --ignore-files 'dist/**' 'node_modules/**' 'tests/**' 'e2e/**' '.github/**' 'promo*.png' 'example.gif' 'test.html' '.prettierrc' '.gitattributes' 'PRIVACY_POLICY.md' 'README.md' 'ROADMAP.md' 'package.json' 'package-lock.json' 'vitest.config.js' 'vitest.e2e.config.js'",
+    "lint": "web-ext lint --source-dir . --ignore-files 'dist/**' 'node_modules/**' 'tests/**' 'e2e/**' 'playground/**' 'tools/**' '.github/**' 'promo*.png' 'example.gif' 'test.html' '.prettierrc' '.gitattributes' 'PRIVACY_POLICY.md' 'README.md' 'ROADMAP.md' 'package.json' 'package-lock.json' 'vitest.config.js' 'vitest.e2e.config.js'",
     "build": "mkdir -p dist && rm -f dist/clickster.zip && zip -r dist/clickster.zip manifest.json clickster.js popup icons LICENSE"
   },
   "devDependencies": {
