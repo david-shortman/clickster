@@ -26,8 +26,12 @@ extension's reviews, the same needs repeat:
    reason — see above). Open source, minimal permissions, and a privacy policy
    are persuasive listing copy in this category.
 5. **Sequences are the real advanced feature.** "Click A, then B" (confirm
-   dialogs, course-ware Next buttons) shows up repeatedly. Clicks-per-second
-   speed only matters to the gaming persona, which is a different product.
+   dialogs, course-ware Next buttons) shows up repeatedly.
+6. **There's a second, reachable audience: browser-game players.** "Speed
+   control," "add more clicks per second," "muti click," and Cookie Clicker all
+   appear in the corpus. Browser DOM games are squarely in reach — see the
+   gamer track below. (Native games like Minecraft/Roblox are not; see
+   Non-goals.)
 
 Clickster's element-targeted, interval-based design is already the right
 architecture for the underserved persona: the **task automator** (auto-advance
@@ -74,12 +78,46 @@ Each fix lands with a regression test (test harness: #16).
   trust story: open source, no build step, no data collection, minimal
   permissions
 
+### P2 — Browser-game players (a reachable second audience)
+
+The review corpus has clear gaming signal, but be precise about what's reachable:
+
+- **In reach:** browser DOM games (Cookie Clicker, idle/incremental, button
+  clickers, CPS-test sites). Clickster already clicks DOM elements; these
+  players just need speed and ergonomics.
+- **Partly in reach:** canvas/coordinate games — only if we dispatch real
+  coordinate-bearing events (below).
+- **Out of reach, permanently:** native desktop games (Minecraft, Roblox
+  client). See Non-goals.
+
+The crux is `clickSelectedElements`: it calls bare `element.ref.click()` (no
+coordinates, click-only) and writes a border + 500ms `setTimeout` on *every*
+click, which thrashes layout and caps throughput at speed.
+
+- **Sub-second / CPS rate.** The popup only accepts whole seconds, though the
+  internal interval is already milliseconds. Let users enter clicks-per-second.
+  Practical ceiling is ~250 CPS (the HTML 4ms `setInterval` floor) — ample for
+  idle games. Gate the per-click visual flash above a few CPS.
+- **Dispatch real MouseEvents** — `mousedown`/`mouseup`/`click` carrying
+  `clientX`/`clientY` at the element's center, instead of bare `.click()`. Helps
+  games (canvas, hold mechanics) *and* the task automator (sites that ignore
+  synthetic `.click()`), so it earns its keep twice.
+- **Interval jitter (±N%).** Humanize timing where anti-bot exists — a rival's
+  reviewer reported a Twitch ban for "booting."
+- **Live CPS readout** in the popup (the playground HUD proves the idea).
+- Hotkey toggle / hold-to-click overlaps the P2 hotkey item above; gamers want
+  it most.
+
 ## Non-goals
 
-- **High-CPS gaming clicks** (Roblox/Minecraft/Cookie Clicker speed-clicking).
-  That persona wants OS-level input simulation and hotkey-at-cursor behavior —
-  a different product with different risks.
-- **Coordinate-based clicking.** Element targeting is the differentiator;
-  screen coordinates break on every layout change.
+- **Native desktop games** (Minecraft, Roblox client, any non-browser app). A
+  browser extension cannot synthesize input outside the browser — full stop. The
+  listing should say browser-games-only plainly, to set expectations and
+  pre-empt "doesn't work in Minecraft" 1-stars. (Browser games like Cookie
+  Clicker *are* in scope — see the gamer track.)
+- **Always-on coordinate clicking detached from a target.** Element targeting is
+  the differentiator and survives layout changes; clicking blind screen
+  coordinates does not. (Dispatching coordinate-bearing events *at a targeted
+  element* is fine and desirable — see the gamer track.)
 - **Anything that isn't a plain, build-free web extension.** Shipped code
   stays unprocessed source (our AMO submissions declare no build tooling).
