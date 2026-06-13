@@ -5,6 +5,13 @@ const browser = isChrome ? chrome : window["browser"];
 const TICK_MS = 200;
 const DEFAULT_INTERVAL_MS = 1000;
 
+// The selected highlight is a box-shadow ring rather than a border so it hugs
+// the element's own border-radius (border-image ignores border-radius) and
+// adds no layout shift. Concentric rings keep the rainbow identity.
+const SELECTED_SHADOW =
+  "0 0 0 1px #b827fc, 0 0 0 2px #2c90fc, 0 0 0 3px #b8fd33, " +
+  "0 0 0 4px #fec837, 0 0 0 5px #fd1892";
+
 // Persisted so clicking survives the navigations and reloads it often triggers
 // (a click on a "next" button reloads the page). Restored on load below.
 let clicksterEnabled = localStorage.getItem("clicksterEnabled") === "true";
@@ -62,17 +69,12 @@ document.addEventListener("mousemove", (event) => {
 });
 
 function displayAsSelected(element) {
-  element.style.border = "thick solid";
-  element.style["border-image-source"] =
-    "linear-gradient(to bottom right, #b827fc 0%, #2c90fc 25%, #b8fd33 50%, #fec837 75%, #fd1892 100%)";
-  element.style["border-image-slice"] = 1;
+  element.style.boxShadow = SELECTED_SHADOW;
 }
 
 function restoreHighlight(target) {
   if (!target.ref) return;
-  target.ref.style.border = target.originalBorder;
-  target.ref.style["border-image"] = target.originalBorderImageSource;
-  target.ref.style["border-image-slice"] = target.originalBorderImageSlice;
+  target.ref.style.boxShadow = target.originalBoxShadow;
 }
 
 function cssEscape(value) {
@@ -149,9 +151,7 @@ function addTarget(element, options) {
     clickCount: 0,
     lastClickedAt: Date.now(),
     paused: !!options.paused,
-    originalBorder: element.style.border,
-    originalBorderImageSource: element.style["border-image-source"],
-    originalBorderImageSlice: element.style["border-image-slice"],
+    originalBoxShadow: element.style.boxShadow,
   });
   displayAsSelected(element);
 }
@@ -212,7 +212,7 @@ function showTarget(id) {
 
 function flashClicked(target) {
   if (!target.ref) return;
-  target.ref.style.border = "thick solid silver";
+  target.ref.style.boxShadow = "0 0 0 3px silver";
   setTimeout(() => {
     if (targets.indexOf(target) !== -1) displayAsSelected(target.ref);
   }, TICK_MS);
@@ -233,9 +233,7 @@ function resolveTarget(target) {
   }
   if (found) {
     target.ref = found;
-    target.originalBorder = found.style.border;
-    target.originalBorderImageSource = found.style["border-image-source"];
-    target.originalBorderImageSlice = found.style["border-image-slice"];
+    target.originalBoxShadow = found.style.boxShadow;
     displayAsSelected(found);
   }
   return found;

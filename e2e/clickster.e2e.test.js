@@ -64,9 +64,9 @@ async function styleOf(elementId) {
   return (await el.getAttribute("style")) ?? "";
 }
 
-/** The selected-target style is the rainbow border-image gradient. */
+/** The selected-target highlight is the rainbow box-shadow ring (#b827fc). */
 function isSelected(style) {
-  return style.includes("border-image") && style.includes("linear-gradient");
+  return style.includes("box-shadow") && style.includes("rgb(184, 39, 252)");
 }
 
 /** Poll until an element is (or is not) showing the selected highlight. */

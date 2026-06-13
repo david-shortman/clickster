@@ -68,8 +68,8 @@ describe("clickster content script", () => {
       const s = state();
       expect(s.targets).toHaveLength(1);
       expect(s.targets[0].label).toBe("Squash and Merge");
-      expect(document.getElementById("target").style.border).toContain(
-        "thick solid"
+      expect(document.getElementById("target").style.boxShadow).toContain(
+        "#b827fc"
       );
     });
 
@@ -106,16 +106,25 @@ describe("clickster content script", () => {
         new MouseEvent("mousemove", { clientX: 11, clientY: 11 })
       );
       expect(a.style.border).not.toContain("red");
+
+      // Complete a selection so this script doesn't stay armed in selection
+      // mode — the jsdom document and its listeners persist across tests, so a
+      // script left mid-selection would hijack the next test's click.
+      elementUnderCursor = a;
+      document.dispatchEvent(
+        new MouseEvent("mousemove", { clientX: 10, clientY: 10 })
+      );
+      document.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     it("removes a target and restores its highlight", () => {
       const target = document.getElementById("target");
       hoverAndSelect(target);
-      expect(target.style.border).toContain("thick solid");
+      expect(target.style.boxShadow).toContain("#b827fc");
 
       browser.emit({ removeTargetId: state().targets[0].id });
       expect(state().targets).toHaveLength(0);
-      expect(target.style.border).not.toContain("thick solid");
+      expect(target.style.boxShadow).toBe("");
     });
   });
 
@@ -202,7 +211,9 @@ describe("clickster content script", () => {
 
       vi.advanceTimersByTime(INTERVAL_MS * 2);
       expect(freshClicks).toHaveBeenCalledTimes(2);
-      expect(fresh.style.border).toContain("thick solid"); // highlight followed
+      // Let the per-click silver flash settle back to the rainbow ring.
+      vi.advanceTimersByTime(300);
+      expect(fresh.style.boxShadow).toContain("#b827fc"); // highlight followed
     });
 
     it("pauses and resumes an individual target", () => {
