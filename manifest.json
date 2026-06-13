@@ -2,6 +2,11 @@
   "manifest_version": 2,
   "name": "Clickster",
   "version": "1.1.1",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{d9a80c5d-e4ea-4d11-8437-aedf73f2028b}"
+    }
+  },
   "description": "Select an element to be automatically clicked at a determined interval.",
   "icons": {
     "48": "icons/48.png",
