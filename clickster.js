@@ -1,7 +1,14 @@
 const isChrome = !window["browser"] && !!chrome;
 // Prefer the more standard `browser` before Chrome API
 const browser = isChrome ? chrome : window["browser"];
-let clicksterEnabled = false;
+// Persisted so clicking survives the navigations and reloads it often triggers
+// (a click on a "next" button reloads the page). Restored on load below.
+let clicksterEnabled = localStorage.getItem("clicksterEnabled") === "true";
+
+function setClicksterEnabled(enabled) {
+  clicksterEnabled = enabled;
+  localStorage.setItem("clicksterEnabled", enabled ? "true" : "false");
+}
 
 let isSelectionModeEnabled = false;
 let clickInterval = localStorage.getItem("clicksterClickInterval");
@@ -103,6 +110,50 @@ function removeSelectedHighlight(element) {
   element.ref.style["border-image-slice"] = originalBorderImageSlice;
 }
 
+// Persist the current targets as CSS selectors so they can be re-resolved
+// after a reload. Single selections and advanced queries share this store.
+function persistTargets(selectors) {
+  localStorage.setItem("clicksterTargets", JSON.stringify(selectors));
+}
+
+function cssEscape(value) {
+  if (typeof CSS !== "undefined" && CSS && CSS.escape) {
+    return CSS.escape(value);
+  }
+  // Fallback for runtimes without CSS.escape (e.g. the jsdom test env).
+  return value.replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+}
+
+// Build a reasonably unique selector for a clicked element: its id when it has
+// one, otherwise an :nth-of-type path up to the nearest id-rooted ancestor.
+function cssPathFor(element) {
+  if (element.id) {
+    return "#" + cssEscape(element.id);
+  }
+  const path = [];
+  let node = element;
+  while (node && node.nodeType === 1 && node !== document.body) {
+    if (node.id) {
+      path.unshift("#" + cssEscape(node.id));
+      break;
+    }
+    let segment = node.tagName.toLowerCase();
+    const parent = node.parentNode;
+    if (parent) {
+      const twins = Array.prototype.filter.call(
+        parent.children,
+        (child) => child.tagName === node.tagName
+      );
+      if (twins.length > 1) {
+        segment += ":nth-of-type(" + (twins.indexOf(node) + 1) + ")";
+      }
+    }
+    path.unshift(segment);
+    node = parent;
+  }
+  return path.join(" > ");
+}
+
 function setSelectedElement(event) {
   if (shouldNextClickSelectAnElement) {
     event.preventDefault();
@@ -119,6 +170,7 @@ function setSelectedElement(event) {
 
     const selectedElement = document.elementFromPoint(clientX, clientY);
     targetElement(selectedElement);
+    persistTargets([cssPathFor(selectedElement)]);
 
     timeLastClicked = new Date();
     startClicking();
@@ -207,18 +259,21 @@ function enableSelectionMode() {
 
 function manuallyClearSelectedElements() {
   stopClicking();
+  setClicksterEnabled(false);
   timeLastClicked = null;
   Object.entries(selectedElementsToClick).forEach(([key, value]) => {
     removeSelectedHighlight(value);
     delete selectedElementsToClick[key];
   });
   localStorage.removeItem("clicksterQuery");
+  localStorage.removeItem("clicksterTargets");
 }
 
 function applyQuery(query) {
   localStorage.setItem("clicksterQuery", query);
   lastQuery = query;
   const elementSelectors = query.split("\n");
+  persistTargets(elementSelectors);
   const selectedElements = elementSelectors.map((selector) => [
     ...document.body.querySelectorAll(selector),
   ]);
@@ -228,6 +283,39 @@ function applyQuery(query) {
   });
   stopClicking();
   startClicking();
+}
+
+// Re-resolve persisted target selectors after a page load and resume clicking
+// if it was running. This is what makes clicking survive a reload (issue #11).
+function restoreTargets() {
+  let selectors = [];
+  const storedTargets = localStorage.getItem("clicksterTargets");
+  if (storedTargets) {
+    try {
+      selectors = JSON.parse(storedTargets);
+    } catch (e) {
+      selectors = [];
+    }
+  }
+  // Fall back to the older query-only state so existing users keep their target.
+  if (selectors.length === 0) {
+    const cachedQuery = localStorage.getItem("clicksterQuery");
+    if (cachedQuery) {
+      selectors = cachedQuery.split("\n");
+    }
+  }
+  selectors.forEach((selector) => {
+    try {
+      document.body.querySelectorAll(selector).forEach((element) => {
+        targetElement(element);
+      });
+    } catch (e) {
+      // Ignore selectors that no longer parse or match on this page.
+    }
+  });
+  if (Object.keys(selectedElementsToClick).length > 0) {
+    startClicking();
+  }
 }
 
 browser.runtime.onMessage.addListener(function (message) {
@@ -246,10 +334,10 @@ browser.runtime.onMessage.addListener(function (message) {
   } else if (message.advancedQuery) {
     applyQuery(message.advancedQuery);
   } else if (message === "STOP_CLICKING") {
-    clicksterEnabled = false;
+    setClicksterEnabled(false);
     stopClicking();
   } else if (message === "START_CLICKING") {
-    clicksterEnabled = true;
+    setClicksterEnabled(true);
     startClicking();
   } else if (message === "GET_IS_CLICKSTER_ENABLED") {
     sendIsEnabled();
@@ -258,6 +346,4 @@ browser.runtime.onMessage.addListener(function (message) {
   }
 });
 
-if (!!localStorage.getItem("clicksterQuery")) {
-  applyQuery(localStorage.getItem("clicksterQuery"));
-}
+restoreTargets();

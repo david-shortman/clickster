@@ -29,6 +29,15 @@ async function closePopup() {
 
 async function loadFixturePage() {
   await driver.switchTo().window(pageHandle);
+  // Drop any persisted state from a previous test so each starts clean. (#11
+  // makes the enabled flag and targets survive reloads — including into the
+  // next test if not cleared.) The try/catch covers the first run on
+  // about:blank, where localStorage isn't reachable.
+  try {
+    await driver.executeScript("localStorage.clear();");
+  } catch (e) {
+    // no page with localStorage yet
+  }
   await navigateTo(driver, fixtureUrl("counter.html"), By.id("one"));
   await openPopup();
   if (tabId === undefined) {
@@ -37,6 +46,12 @@ async function loadFixturePage() {
   }
   await waitForContentScript(driver, tabId);
   await closePopup();
+}
+
+/** Reload the page-under-test without clearing state or touching the popup. */
+async function reloadFixturePage() {
+  await driver.switchTo().window(pageHandle);
+  await navigateTo(driver, fixtureUrl("counter.html"), By.id("one"));
 }
 
 async function readCount(spanId) {
@@ -154,6 +169,9 @@ describe("clickster in real Firefox", () => {
     await textarea.sendKeys("#one\n#two");
     await clickPopupButton("apply-elements-query-btn");
     await driver.sleep(300);
+    const intervalField = await driver.findElement(By.id("click-interval-fld"));
+    await intervalField.clear();
+    await intervalField.sendKeys("1");
     await clickPopupButton("clickster-start-button");
     await closePopup();
 
@@ -166,24 +184,26 @@ describe("clickster in real Firefox", () => {
   }, 90000);
 
   it("restores advanced-query targets after a page reload", async () => {
-    // Depends on the cached query from the previous test (same origin).
-    await driver.switchTo().window(pageHandle);
-    await navigateTo(driver, fixtureUrl("counter.html"), By.id("one"));
-    await openPopup();
-    await waitForContentScript(driver, tabId);
-    await closePopup();
+    await loadFixturePage();
 
-    // Targets re-selected from the cached query, with no popup interaction.
-    await driver.wait(async () => {
-      return isSelected(await styleOf("one"));
-    }, 5000);
-    expect(isSelected(await styleOf("two"))).toBe(true);
+    // Apply an advanced query but don't start clicking, so the highlight
+    // styles stay stable for the assertion.
+    await openPopup();
+    await clickPopupButton("advanced-options-btn");
+    await driver
+      .findElement(By.id("advanced-elements-query-txtarea"))
+      .sendKeys("#one\n#two");
+    await clickPopupButton("apply-elements-query-btn");
+    await closePopup();
+    await waitForSelected("one", true);
+
+    // Reload without touching the popup — targets restore from persistence.
+    await reloadFixturePage();
+    await waitForSelected("one", true);
+    await waitForSelected("two", true);
   }, 90000);
 
   it("replaces the target when selecting a second element with one active", async () => {
-    // Start clean so nothing is auto-restored from an earlier test's query.
-    await driver.switchTo().window(pageHandle);
-    await driver.executeScript("localStorage.clear();");
     await loadFixturePage();
 
     // First selection on an empty slate works in any version.
@@ -208,5 +228,30 @@ describe("clickster in real Firefox", () => {
     await driver.sleep(2500);
     expect(await readCount("count-two")).toBeGreaterThanOrEqual(2);
     expect(await readCount("count-one")).toBe(oneBefore);
+  }, 90000);
+
+  it("keeps clicking after a page reload (#11)", async () => {
+    await loadFixturePage();
+    await selectTargetByPointer("one");
+    await waitForSelected("one", true);
+
+    // Start clicking at 1/s.
+    await openPopup();
+    const intervalField = await driver.findElement(By.id("click-interval-fld"));
+    await intervalField.clear();
+    await intervalField.sendKeys("1");
+    await clickPopupButton("clickster-start-button");
+    await closePopup();
+    await driver.wait(async () => (await readCount("count-one")) >= 1, 5000);
+
+    // Reload the page. The counter resets to 0, but clicking should resume on
+    // its own — without reopening the popup or pressing Start again. Before
+    // #11 it stayed silent until the user re-armed it.
+    await reloadFixturePage();
+    await driver.wait(
+      async () => (await readCount("count-one")) >= 2,
+      8000,
+      "clicking did not resume after reload"
+    );
   }, 90000);
 });
