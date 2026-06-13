@@ -186,6 +186,25 @@ describe("clickster content script", () => {
       expect(slowClicks).toHaveBeenCalledTimes(1);
     });
 
+    it("re-resolves a re-rendered target and keeps clicking the live node (#12)", () => {
+      const original = document.getElementById("target");
+      hoverAndSelect(original);
+      browser.emit("START_CLICKING");
+      vi.advanceTimersByTime(INTERVAL_MS);
+
+      // Simulate a re-render: the node is detached and replaced by a fresh one
+      // matching the same selector.
+      original.remove();
+      const fresh = document.createElement("button");
+      fresh.id = "target";
+      document.body.appendChild(fresh);
+      const freshClicks = countClicks(fresh);
+
+      vi.advanceTimersByTime(INTERVAL_MS * 2);
+      expect(freshClicks).toHaveBeenCalledTimes(2);
+      expect(fresh.style.border).toContain("thick solid"); // highlight followed
+    });
+
     it("pauses and resumes an individual target", () => {
       const target = document.getElementById("target");
       const other = document.getElementById("other");

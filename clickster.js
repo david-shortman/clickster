@@ -218,13 +218,38 @@ function flashClicked(target) {
   }, TICK_MS);
 }
 
+// Keep the target pointing at the live element. When a page re-renders a node
+// (SPA updates, the respawning-button case), the stored ref detaches; re-find
+// it by selector and move the highlight to the live element (issue #12).
+function resolveTarget(target) {
+  if (target.ref && target.ref.isConnected) {
+    return target.ref;
+  }
+  let found = null;
+  try {
+    found = document.querySelector(target.selector);
+  } catch (e) {
+    found = null;
+  }
+  if (found) {
+    target.ref = found;
+    target.originalBorder = found.style.border;
+    target.originalBorderImageSource = found.style["border-image-source"];
+    target.originalBorderImageSlice = found.style["border-image-slice"];
+    displayAsSelected(found);
+  }
+  return found;
+}
+
 function tick() {
   if (!clicksterEnabled) return;
   const now = Date.now();
   targets.forEach((target) => {
-    if (target.paused || !target.ref || !target.ref.click) return;
+    if (target.paused) return;
+    const ref = resolveTarget(target);
+    if (!ref || !ref.click) return;
     if (now - target.lastClickedAt >= target.intervalMs) {
-      target.ref.click();
+      ref.click();
       target.clickCount += 1;
       target.lastClickedAt = now;
       flashClicked(target);

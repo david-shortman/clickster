@@ -286,4 +286,25 @@ describe("clickster in real Firefox", () => {
     await driver.sleep(2000);
     expect(await readCount("count-one")).toBe(afterStop);
   }, 90000);
+
+  it("keeps clicking a re-rendered target and re-highlights it (#12)", async () => {
+    await loadFixturePage();
+    // #respawn is destroyed and recreated every 1.5s.
+    await selectTargetByPointer("respawn");
+    await openPopup();
+    await clickPopupButton("start-btn");
+    await closePopup();
+
+    // Run through several respawns; clicks must keep landing on the live node.
+    await driver.sleep(2000);
+    const before = await readCount("count-respawn");
+    await driver.sleep(2500);
+    expect(await readCount("count-respawn")).toBeGreaterThan(before);
+    // The re-rendered node carries the rainbow highlight.
+    await driver.wait(
+      async () => isSelected(await styleOf("respawn")),
+      3000,
+      "re-rendered target lost its highlight"
+    );
+  }, 90000);
 });

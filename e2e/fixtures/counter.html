@@ -15,6 +15,9 @@
   <body>
     <button id="one">Button One (<span id="count-one">0</span>)</button>
     <button id="two">Button Two (<span id="count-two">0</span>)</button>
+    <div id="respawn-host">
+      <button id="respawn">Respawn (<span id="count-respawn">0</span>)</button>
+    </div>
     <script>
       let one = 0;
       let two = 0;
@@ -26,6 +29,26 @@
         two += 1;
         document.getElementById("count-two").textContent = String(two);
       });
+
+      // #respawn is destroyed and recreated (a new node, same id and position)
+      // every 1.5s, carrying its count — exercises stale refs (#12).
+      function wireRespawn() {
+        document.getElementById("respawn").addEventListener("click", () => {
+          const span = document.getElementById("count-respawn");
+          span.textContent = String(Number(span.textContent) + 1);
+        });
+      }
+      wireRespawn();
+      setInterval(() => {
+        const host = document.getElementById("respawn-host");
+        const carried =
+          document.getElementById("count-respawn").textContent;
+        host.innerHTML =
+          '<button id="respawn">Respawn (<span id="count-respawn">' +
+          carried +
+          "</span>)</button>";
+        wireRespawn();
+      }, 1500);
     </script>
   </body>
 </html>
