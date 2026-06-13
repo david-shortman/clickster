@@ -291,8 +291,9 @@ describe("clickster in real Firefox", () => {
       until.elementLocated(By.id("clickster-resume-toast-stop")),
       8000
     );
-    await stop.click();
-    await driver.wait(until.stalenessOf(stop), 5000);
+    // Click it like a user would: a real hit-tested pointer click.
+    await driver.actions().move({ origin: stop }).click().perform();
+    await driver.wait(until.stalenessOf(stop), 5000, "toast did not dismiss");
     const afterStop = await readCount("count-one");
     await driver.sleep(2000);
     expect(await readCount("count-one")).toBe(afterStop);
@@ -317,5 +318,39 @@ describe("clickster in real Firefox", () => {
       3000,
       "re-rendered target lost its highlight"
     );
+  }, 90000);
+
+  it("resume toast: Keep clicking and Don't show again work", async () => {
+    await loadFixturePage();
+    await selectTargetByPointer("one");
+    await openPopup();
+    await clickPopupButton("start-btn");
+    await closePopup();
+    await driver.wait(async () => (await readCount("count-one")) >= 1, 5000);
+
+    // Keep clicking: dismisses the toast but leaves clicking running.
+    await reloadFixturePage();
+    const keep = await driver.wait(
+      until.elementLocated(By.xpath("//button[normalize-space()='Keep clicking']")),
+      8000
+    );
+    await driver.actions().move({ origin: keep }).click().perform();
+    await driver.wait(until.stalenessOf(keep), 5000, "Keep clicking did nothing");
+    const n = await readCount("count-one");
+    await driver.wait(async () => (await readCount("count-one")) > n, 5000);
+
+    // Don't show again: dismiss now and suppress on later reloads.
+    await reloadFixturePage();
+    const hide = await driver.wait(
+      until.elementLocated(By.xpath("//a[contains(text(),'Don')]")),
+      8000
+    );
+    await driver.actions().move({ origin: hide }).click().perform();
+    await driver.wait(until.stalenessOf(hide), 5000, "Don't show again did nothing");
+    await reloadFixturePage();
+    await driver.sleep(1500);
+    expect(
+      (await driver.findElements(By.id("clickster-resume-toast-stop"))).length
+    ).toBe(0);
   }, 90000);
 });
