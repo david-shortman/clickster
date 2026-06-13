@@ -83,6 +83,25 @@ describe("clickster content script", () => {
       expect(state().targets).toHaveLength(1);
     });
 
+    it("builds an :nth-of-type selector for a target with no id", () => {
+      document.body.innerHTML =
+        '<div id="panel"><button>Alpha</button><button>Beta</button></div>';
+      const beta = document.body.querySelectorAll("#panel button")[1];
+
+      browser.emit("SELECT_ELEMENT_CLICKED");
+      elementUnderCursor = beta;
+      document.dispatchEvent(
+        new MouseEvent("mousemove", { clientX: 10, clientY: 10 })
+      );
+      document.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+      const stored = JSON.parse(localStorage.getItem("clicksterTargets"));
+      expect(stored[0].selector).toContain(":nth-of-type(2)");
+      // The generated selector must resolve uniquely back to the same element.
+      expect(document.querySelectorAll(stored[0].selector)).toHaveLength(1);
+      expect(document.querySelector(stored[0].selector)).toBe(beta);
+    });
+
     it("adds further selections instead of replacing (additive)", () => {
       hoverAndSelect(document.getElementById("target"));
       hoverAndSelect(document.getElementById("other"));

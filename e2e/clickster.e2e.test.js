@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { By, until } from "selenium-webdriver";
+import { By, Key, until } from "selenium-webdriver";
 import {
   buildDriver,
   findTabIdByUrl,
@@ -352,5 +352,47 @@ describe("clickster in real Firefox", () => {
     expect(
       (await driver.findElements(By.id("clickster-resume-toast-stop"))).length
     ).toBe(0);
+  }, 90000);
+
+  // These two leave the page mid-selection, so they run last to avoid
+  // perturbing the window/selection state of earlier, longer flows.
+  it("selects a target with the Enter key", async () => {
+    await loadFixturePage();
+
+    await openPopup();
+    await (await armSelectionButton()).click();
+    await driver.switchTo().window(pageHandle);
+
+    // Hover the target (arms selection on mousemove), then press Enter.
+    const one = await driver.findElement(By.id("one"));
+    await driver.actions().move({ x: 5, y: 5 }).perform();
+    await driver.actions().move({ origin: one }).perform();
+    await driver.actions().keyDown(Key.ENTER).keyUp(Key.ENTER).perform();
+
+    await waitForSelected("one", true);
+  }, 90000);
+
+  it("does not strand hover borders when the cursor crosses the background", async () => {
+    await loadFixturePage();
+
+    await openPopup();
+    await (await armSelectionButton()).click();
+    await driver.switchTo().window(pageHandle);
+
+    const one = await driver.findElement(By.id("one"));
+    const two = await driver.findElement(By.id("two"));
+    await driver.actions().move({ origin: one }).perform(); // #one highlighted
+    await driver.actions().move({ x: 600, y: 40 }).perform(); // page background
+    await driver.actions().move({ origin: two }).perform(); // #two highlighted
+
+    // #one's transient hover border must be gone — the old code skipped its
+    // cleanup whenever the cursor passed over the background.
+    await driver.wait(
+      async () => !(await styleOf("one")).includes("solid"),
+      3000,
+      "stranded hover border on #one"
+    );
+    // Complete a selection so we don't leave the page armed in selection mode.
+    await driver.actions().click().perform();
   }, 90000);
 });
