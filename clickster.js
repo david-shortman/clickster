@@ -11,11 +11,11 @@ const DEFAULT_INTERVAL_MS = 1000;
 const SELECTED_SHADOW =
   "0 0 0 1px #b827fc, 0 0 0 2px #2c90fc, 0 0 0 3px #b8fd33, " +
   "0 0 0 4px #fec837, 0 0 0 5px #fd1892";
-// The mid-keyframe of the click pulse: the same rings, bulged outward, so each
-// click looks like the ring is soft material being pressed and springing back.
+// The mid-keyframe of the click pulse: the same rings, bulged outward a touch,
+// so each click gives a subtle "pressed and springing back" feel.
 const PRESSED_SHADOW =
-  "0 0 0 2px #b827fc, 0 0 0 4px #2c90fc, 0 0 0 7px #b8fd33, " +
-  "0 0 0 10px #fec837, 0 0 0 14px #fd1892";
+  "0 0 0 1px #b827fc, 0 0 0 2px #2c90fc, 0 0 0 4px #b8fd33, " +
+  "0 0 0 6px #fec837, 0 0 0 8px #fd1892";
 
 // Persisted so clicking survives the navigations and reloads it often triggers
 // (a click on a "next" button reloads the page). Restored on load below.
