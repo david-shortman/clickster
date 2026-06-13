@@ -245,4 +245,66 @@ describe("clickster content script", () => {
       expect(localStorage.getItem("clicksterQuery")).toBeNull();
     });
   });
+
+  describe("persistence across reload (#11)", () => {
+    // A fresh script run against the same DOM + localStorage is what a real
+    // page reload looks like to the content script. Clear timers first, since
+    // navigating away tears down the old page's intervals.
+    function reload() {
+      vi.clearAllTimers();
+      browser = installBrowserMock();
+      loadScript("clickster.js");
+    }
+
+    it("resumes clicking after reload when it was running", () => {
+      const target = document.getElementById("target");
+      hoverAndSelect(target);
+      browser.emit("START_CLICKING");
+
+      reload();
+
+      const clicks = countClicks(target);
+      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS * 2);
+      expect(clicks).toHaveBeenCalledTimes(2);
+    });
+
+    it("stays stopped after reload when it was not running", () => {
+      const target = document.getElementById("target");
+      hoverAndSelect(target);
+      browser.emit("START_CLICKING");
+      browser.emit("STOP_CLICKING");
+
+      reload();
+
+      const clicks = countClicks(target);
+      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS * 2);
+      expect(clicks).not.toHaveBeenCalled();
+    });
+
+    it("restores a single selected target after reload", () => {
+      // Before #11 a single selection was lost on reload — only advanced
+      // queries persisted. It should now come back.
+      hoverAndSelect(document.getElementById("target"));
+
+      reload();
+
+      browser.emit("IS_ELEMENT_SELECTED");
+      expect(browser.runtime.sendMessage).toHaveBeenLastCalledWith(
+        "ELEMENT_IS_SELECTED"
+      );
+    });
+
+    it("does not resume after the selection is cleared and reloaded", () => {
+      const target = document.getElementById("target");
+      hoverAndSelect(target);
+      browser.emit("START_CLICKING");
+      browser.emit("CLEAR_SELECTED_ELEMENT");
+
+      reload();
+
+      const clicks = countClicks(target);
+      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS * 2);
+      expect(clicks).not.toHaveBeenCalled();
+    });
+  });
 });
