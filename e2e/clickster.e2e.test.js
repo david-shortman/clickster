@@ -54,6 +54,15 @@ function isSelected(style) {
   return style.includes("border-image") && style.includes("linear-gradient");
 }
 
+/** Poll until an element is (or is not) showing the selected highlight. */
+async function waitForSelected(elementId, selected = true, timeoutMs = 5000) {
+  await driver.wait(
+    async () => isSelected(await styleOf(elementId)) === selected,
+    timeoutMs,
+    `#${elementId} expected selected=${selected}`
+  );
+}
+
 /** In the open popup tab: wait for state sync, then press a popup button. */
 async function clickPopupButton(buttonId) {
   const button = await driver.wait(
@@ -62,6 +71,24 @@ async function clickPopupButton(buttonId) {
   );
   await driver.wait(until.elementIsVisible(button), 5000);
   await button.click();
+}
+
+/**
+ * Arm selection mode from the popup, then hover the target on the page and
+ * click it with a real pointer (exercising the page's elementFromPoint).
+ * Leaves the driver focused on the page-under-test.
+ */
+async function selectTargetByPointer(elementId) {
+  await openPopup();
+  await clickPopupButton("select-element-btn");
+  await driver.switchTo().window(pageHandle);
+  const target = await driver.findElement(By.id(elementId));
+  // Nudge to a neutral spot first: Selenium emits no mousemove when the
+  // pointer is already at the destination (e.g. re-selecting the element it
+  // last sat on), and the content script arms selection on mousemove.
+  await driver.actions().move({ x: 5, y: 5 }).perform();
+  await driver.actions().move({ origin: target }).perform();
+  await driver.actions().click().perform();
 }
 
 beforeAll(async () => {
@@ -79,15 +106,8 @@ describe("clickster in real Firefox", () => {
   it("selects a hovered element and repeatedly clicks it at the configured interval", async () => {
     await loadFixturePage();
 
-    // Arm selection mode from the popup. The popup closes itself afterwards.
-    await openPopup();
-    await clickPopupButton("select-element-btn");
-    await driver.switchTo().window(pageHandle);
-
     // Hover the target with a real pointer (real elementFromPoint) and click.
-    const buttonOne = await driver.findElement(By.id("one"));
-    await driver.actions().move({ origin: buttonOne }).perform();
-    await driver.actions().click().perform();
+    await selectTargetByPointer("one");
     expect(isSelected(await styleOf("one"))).toBe(true);
 
     // The popup reflects the selection and can start clicking.
@@ -158,5 +178,35 @@ describe("clickster in real Firefox", () => {
       return isSelected(await styleOf("one"));
     }, 5000);
     expect(isSelected(await styleOf("two"))).toBe(true);
+  }, 90000);
+
+  it("replaces the target when selecting a second element with one active", async () => {
+    // Start clean so nothing is auto-restored from an earlier test's query.
+    await driver.switchTo().window(pageHandle);
+    await driver.executeScript("localStorage.clear();");
+    await loadFixturePage();
+
+    // First selection on an empty slate works in any version.
+    await selectTargetByPointer("one");
+    await waitForSelected("one", true);
+
+    // Selecting a second element while "one" is active is the issue #10
+    // repro: setSelectedElement threw clearing the prior highlight, so the
+    // new selection silently failed and the popup kept saying "no target".
+    await selectTargetByPointer("two");
+    await waitForSelected("two", true);
+    await waitForSelected("one", false);
+
+    // "two" is now the sole live target: only its counter keeps climbing.
+    const oneBefore = await readCount("count-one");
+    await openPopup();
+    const intervalField = await driver.findElement(By.id("click-interval-fld"));
+    await intervalField.clear();
+    await intervalField.sendKeys("1");
+    await clickPopupButton("clickster-start-button");
+    await closePopup();
+    await driver.sleep(2500);
+    expect(await readCount("count-two")).toBeGreaterThanOrEqual(2);
+    expect(await readCount("count-one")).toBe(oneBefore);
   }, 90000);
 });
