@@ -112,8 +112,8 @@ function setSelectedElement(event) {
     });
 
     removeHoverHighlight(lastHoveredElement);
-    Object.entries(selectedElementsToClick).forEach(([key, { ref }]) => {
-      removeSelectedHighlight(ref);
+    Object.entries(selectedElementsToClick).forEach(([key, value]) => {
+      removeSelectedHighlight(value);
       delete selectedElementsToClick[key];
     });
 

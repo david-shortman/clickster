@@ -86,6 +86,26 @@ describe("clickster content script", () => {
         "NO_ELEMENT_IS_SELECTED"
       );
     });
+
+    it("replaces the target when a new element is selected with one active", () => {
+      const first = document.getElementById("target");
+      const second = document.getElementById("other");
+      hoverAndSelect(first);
+
+      // Selecting again while a target is already active used to throw in
+      // setSelectedElement (issue #10) — it passed the raw element to
+      // removeSelectedHighlight, which dereferences element.ref — silently
+      // aborting the new selection so the popup kept saying "no target".
+      hoverAndSelect(second);
+
+      const clicksFirst = countClicks(first);
+      const clicksSecond = countClicks(second);
+      browser.emit("START_CLICKING");
+      vi.advanceTimersByTime(DEFAULT_INTERVAL_MS);
+
+      expect(clicksSecond).toHaveBeenCalledTimes(1);
+      expect(clicksFirst).not.toHaveBeenCalled();
+    });
   });
 
   describe("interval clicking", () => {
