@@ -276,6 +276,22 @@ describe("clickster content script", () => {
       }
     });
 
+    it("does not click an element occluding the target's point (#35)", () => {
+      const target = document.getElementById("target");
+      hoverAndSelect(target);
+
+      // An overlay covering the target's point wins the hit-test.
+      const occluder = place(document.createElement("div"), 0, 0, 100, 40);
+      document.body.appendChild(occluder);
+      const occluderClicks = countClicks(occluder);
+
+      browser.emit("START_CLICKING");
+      vi.advanceTimersByTime(INTERVAL_MS * 2);
+
+      expect(occluderClicks).not.toHaveBeenCalled();
+      expect(state().targets[0].clickCount).toBe(0);
+    });
+
     it("pauses and resumes an individual target", () => {
       const target = document.getElementById("target");
       const other = document.getElementById("other");

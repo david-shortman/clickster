@@ -393,9 +393,12 @@ function resolveTarget(target) {
 // element.click() — so it works for canvas/coordinate games and for sites that
 // ignore synthetic clicks. Dispatches on whatever element is actually at the
 // point. Events are isTrusted:false (not an anti-cheat bypass).
-function dispatchClickAt(clientX, clientY) {
+function dispatchClickAt(clientX, clientY, anchor) {
   const target = document.elementFromPoint(clientX, clientY);
-  if (!target || typeof target.dispatchEvent !== "function") return;
+  if (!target || typeof target.dispatchEvent !== "function") return false;
+  // Skip if the anchor isn't actually at this point — scrolled off-screen, or
+  // hidden behind a modal/overlay — so we never click the wrong element.
+  if (anchor && anchor !== target && !anchor.contains(target)) return false;
   const base = {
     bubbles: true,
     cancelable: true,
@@ -419,6 +422,7 @@ function dispatchClickAt(clientX, clientY) {
   if (hasPointer) target.dispatchEvent(new PointerEvent("pointerup", pointer(0)));
   target.dispatchEvent(new MouseEvent("mouseup", { ...base, buttons: 0 }));
   target.dispatchEvent(new MouseEvent("click", { ...base, buttons: 0 }));
+  return true;
 }
 
 function tick() {
@@ -437,10 +441,13 @@ function tick() {
       target.markerEl.style.top = y + "px";
     }
     if (now - target.lastClickedAt >= target.intervalMs) {
-      dispatchClickAt(x, y);
-      target.clickCount += 1;
-      target.lastClickedAt = now;
-      pulseClicked(target);
+      // Only count it if the click actually reached the target; otherwise
+      // (off-screen / occluded) leave it due and retry next tick.
+      if (dispatchClickAt(x, y, ref)) {
+        target.clickCount += 1;
+        target.lastClickedAt = now;
+        pulseClicked(target);
+      }
     }
   });
 }

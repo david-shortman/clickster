@@ -18,8 +18,14 @@
     <div id="respawn-host">
       <button id="respawn">Respawn (<span id="count-respawn">0</span>)</button>
     </div>
-    <!-- A canvas that only registers coordinate clicks (not element.click). -->
-    <canvas id="game" width="200" height="120" style="margin: 20px"></canvas>
+    <!-- A canvas that only registers coordinate clicks (not element.click).
+         CSS-scaled 1.5x to exercise coordinate mapping under scaling/DPR. -->
+    <canvas
+      id="game"
+      width="200"
+      height="120"
+      style="margin: 20px; width: 300px; height: 180px"
+    ></canvas>
     <div>
       cookie clicks: <span id="count-game">0</span> · last:
       <span id="game-last">-</span>
@@ -35,8 +41,11 @@
         let gameClicks = 0;
         canvas.addEventListener("mousedown", (e) => {
           const r = canvas.getBoundingClientRect();
-          const x = Math.round(e.clientX - r.left);
-          const y = Math.round(e.clientY - r.top);
+          // Map the CSS-pixel click to canvas pixels (the canvas is scaled).
+          const x = Math.round((e.clientX - r.left) * (canvas.width / r.width));
+          const y = Math.round(
+            (e.clientY - r.top) * (canvas.height / r.height)
+          );
           document.getElementById("game-last").textContent = x + "," + y;
           // Only count clicks that land inside the cookie circle.
           if ((x - 100) * (x - 100) + (y - 60) * (y - 60) <= 40 * 40) {
@@ -47,6 +56,8 @@
         });
       })();
     </script>
+    <!-- Tall spacer so the page scrolls (for the scroll-survival test). -->
+    <div style="height: 1200px"></div>
     <script>
       let one = 0;
       let two = 0;
