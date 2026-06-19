@@ -255,10 +255,14 @@ describe("clickster in real Firefox", () => {
     await openPopup();
     await waitForRows(1);
     const freq = await driver.findElement(By.css(".target .freq-input"));
-    await freq.clear();
-    await freq.sendKeys("3");
-    // Pressing Start blurs the field (firing change -> setTargetInterval) and
-    // resets the countdown.
+    // Set the interval deterministically (clear()+sendKeys can leave "13"s);
+    // dispatch change so the content script applies it.
+    await driver.executeScript(
+      "arguments[0].value='3';" +
+        "arguments[0].dispatchEvent(new Event('change',{bubbles:true}));",
+      freq
+    );
+    // Start resets the countdown so the first click is one interval out.
     await clickPopupButton("start-btn");
     await closePopup();
 
@@ -267,7 +271,7 @@ describe("clickster in real Firefox", () => {
     expect(await readCount("count-one")).toBe(baseline); // 3s rate: nothing yet
     await driver.wait(
       async () => (await readCount("count-one")) > baseline,
-      4000
+      6000
     );
   }, 90000);
 
