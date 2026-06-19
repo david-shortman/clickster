@@ -139,14 +139,58 @@ function persistTargets() {
         selector: t.selector,
         intervalMs: t.intervalMs,
         paused: t.paused,
+        offsetX: t.offsetX,
+        offsetY: t.offsetY,
       }))
     )
   );
 }
 
+function clamp01(value) {
+  return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+// Where, within an element, a click point sits — as a 0..1 fraction of its box
+// so it survives the element moving or resizing. Defaults to the center.
+function offsetWithin(element, point) {
+  const rect = element.getBoundingClientRect();
+  if (!point || !rect.width || !rect.height) {
+    return { x: 0.5, y: 0.5 };
+  }
+  return {
+    x: clamp01((point.x - rect.left) / rect.width),
+    y: clamp01((point.y - rect.top) / rect.height),
+  };
+}
+
 function addTarget(element, options) {
   options = options || {};
-  if (!element || targets.some((t) => t.ref === element)) return;
+  if (!element) return;
+
+  let offsetX = 0.5;
+  let offsetY = 0.5;
+  if (typeof options.offsetX === "number") {
+    offsetX = options.offsetX;
+    offsetY = options.offsetY;
+  } else if (options.point) {
+    const offset = offsetWithin(element, options.point);
+    offsetX = offset.x;
+    offsetY = offset.y;
+  }
+
+  // Dedupe by element + point so the same button isn't added twice, while still
+  // allowing several distinct points on one element (e.g. a <canvas>).
+  if (
+    targets.some(
+      (t) =>
+        t.ref === element &&
+        Math.abs(t.offsetX - offsetX) < 0.02 &&
+        Math.abs(t.offsetY - offsetY) < 0.02
+    )
+  ) {
+    return;
+  }
+
   targets.push({
     id: getNextId(),
     selector: options.selector || cssPathFor(element),
@@ -156,6 +200,8 @@ function addTarget(element, options) {
     clickCount: 0,
     lastClickedAt: Date.now(),
     paused: !!options.paused,
+    offsetX,
+    offsetY,
     originalBoxShadow: element.style.boxShadow,
   });
   displayAsSelected(element);
@@ -252,15 +298,51 @@ function resolveTarget(target) {
   return found;
 }
 
+// Click via real coordinate-bearing events at (clientX, clientY) — not
+// element.click() — so it works for canvas/coordinate games and for sites that
+// ignore synthetic clicks. Dispatches on whatever element is actually at the
+// point. Events are isTrusted:false (not an anti-cheat bypass).
+function dispatchClickAt(clientX, clientY) {
+  const target = document.elementFromPoint(clientX, clientY);
+  if (!target || typeof target.dispatchEvent !== "function") return;
+  const base = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    clientX,
+    clientY,
+    screenX: clientX,
+    screenY: clientY,
+    button: 0,
+  };
+  const hasPointer = typeof PointerEvent === "function";
+  const pointer = (buttons) => ({
+    ...base,
+    buttons,
+    pointerId: 1,
+    pointerType: "mouse",
+    isPrimary: true,
+  });
+  if (hasPointer) target.dispatchEvent(new PointerEvent("pointerdown", pointer(1)));
+  target.dispatchEvent(new MouseEvent("mousedown", { ...base, buttons: 1 }));
+  if (hasPointer) target.dispatchEvent(new PointerEvent("pointerup", pointer(0)));
+  target.dispatchEvent(new MouseEvent("mouseup", { ...base, buttons: 0 }));
+  target.dispatchEvent(new MouseEvent("click", { ...base, buttons: 0 }));
+}
+
 function tick() {
   if (!clicksterEnabled) return;
   const now = Date.now();
   targets.forEach((target) => {
     if (target.paused) return;
     const ref = resolveTarget(target);
-    if (!ref || !ref.click) return;
+    if (!ref || !ref.getBoundingClientRect) return;
     if (now - target.lastClickedAt >= target.intervalMs) {
-      ref.click();
+      const rect = ref.getBoundingClientRect();
+      dispatchClickAt(
+        rect.left + target.offsetX * rect.width,
+        rect.top + target.offsetY * rect.height
+      );
       target.clickCount += 1;
       target.lastClickedAt = now;
       pulseClicked(target);
@@ -299,8 +381,11 @@ function setSelectedElement(event) {
   removeHoverHighlight(lastHoveredElement);
 
   // Additive: each selection adds a target to the list (removed individually
-  // from the popup), rather than replacing the previous one.
-  addTarget(document.elementFromPoint(clientX, clientY));
+  // from the popup), rather than replacing the previous one. The point the user
+  // clicked becomes the target's offset within the element.
+  addTarget(document.elementFromPoint(clientX, clientY), {
+    point: { x: clientX, y: clientY },
+  });
   persistTargets();
 
   isSelectionModeEnabled = false;
@@ -429,9 +514,11 @@ function restoreTargets() {
         ? entry.intervalMs
         : DEFAULT_INTERVAL_MS;
     const paused = typeof entry === "object" ? !!entry.paused : false;
+    const offsetX = typeof entry === "object" ? entry.offsetX : undefined;
+    const offsetY = typeof entry === "object" ? entry.offsetY : undefined;
     try {
       document.body.querySelectorAll(selector).forEach((element) => {
-        addTarget(element, { selector, intervalMs, paused });
+        addTarget(element, { selector, intervalMs, paused, offsetX, offsetY });
       });
     } catch (e) {
       // Ignore selectors that no longer parse or match on this page.

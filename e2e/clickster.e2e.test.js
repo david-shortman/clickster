@@ -395,4 +395,24 @@ describe("clickster in real Firefox", () => {
     // Complete a selection so we don't leave the page armed in selection mode.
     await driver.actions().click().perform();
   }, 90000);
+
+  it("clicks a point inside a canvas at the right coordinate (#28)", async () => {
+    await loadFixturePage();
+    // Selecting the canvas captures the picked point; clicking dispatches real
+    // coordinate-bearing events there — a canvas ignores element.click().
+    await selectTargetByPointer("game");
+
+    await openPopup();
+    await clickPopupButton("start-btn");
+    await closePopup();
+
+    // The cookie only counts clicks that land inside its circle.
+    await driver.wait(async () => (await readCount("count-game")) >= 2, 6000);
+
+    // And the recorded click landed near the canvas centre (100,60).
+    const last = await driver.findElement(By.id("game-last")).getText();
+    const [x, y] = last.split(",").map(Number);
+    expect(Math.abs(x - 100)).toBeLessThan(20);
+    expect(Math.abs(y - 60)).toBeLessThan(20);
+  }, 90000);
 });

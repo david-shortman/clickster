@@ -18,6 +18,35 @@
     <div id="respawn-host">
       <button id="respawn">Respawn (<span id="count-respawn">0</span>)</button>
     </div>
+    <!-- A canvas that only registers coordinate clicks (not element.click). -->
+    <canvas id="game" width="200" height="120" style="margin: 20px"></canvas>
+    <div>
+      cookie clicks: <span id="count-game">0</span> · last:
+      <span id="game-last">-</span>
+    </div>
+    <script>
+      (function () {
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#c97b30";
+        ctx.beginPath();
+        ctx.arc(100, 60, 40, 0, Math.PI * 2);
+        ctx.fill();
+        let gameClicks = 0;
+        canvas.addEventListener("mousedown", (e) => {
+          const r = canvas.getBoundingClientRect();
+          const x = Math.round(e.clientX - r.left);
+          const y = Math.round(e.clientY - r.top);
+          document.getElementById("game-last").textContent = x + "," + y;
+          // Only count clicks that land inside the cookie circle.
+          if ((x - 100) * (x - 100) + (y - 60) * (y - 60) <= 40 * 40) {
+            gameClicks += 1;
+            document.getElementById("count-game").textContent =
+              String(gameClicks);
+          }
+        });
+      })();
+    </script>
     <script>
       let one = 0;
       let two = 0;

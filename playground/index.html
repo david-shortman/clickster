@@ -270,6 +270,21 @@
           Claim — <span class="count" id="patience-count">0</span>
         </button>
       </section>
+
+      <!-- 7. Canvas game — only responds to coordinate clicks -->
+      <section class="card">
+        <h2>🍪 Canvas cookie</h2>
+        <p class="hint">
+          A canvas only registers coordinate clicks. Point Clickster at the
+          cookie — <span class="count" id="cookie-count">0</span> baked.
+        </p>
+        <canvas
+          id="cookie"
+          width="300"
+          height="150"
+          style="width: 100%; border-radius: 10px; cursor: pointer"
+        ></canvas>
+      </section>
     </div>
 
     <footer>Local dev playground · auto-reloads as the extension changes</footer>
@@ -351,6 +366,55 @@
         bump("patience", patienceCount);
         patience.disabled = true;
         setTimeout(() => (patience.disabled = false), 2000);
+      });
+
+      // Canvas cookie: a <canvas> only registers coordinate clicks (no DOM
+      // element to click), so it proves XY clicking. The cookie is centered;
+      // clicks inside its circle score.
+      const cookie = document.getElementById("cookie");
+      const cookieCount = document.getElementById("cookie-count");
+      const cctx = cookie.getContext("2d");
+      const CX = 150;
+      const CY = 75;
+      const CR = 52;
+      let cookiePop = 0;
+      function drawCookie() {
+        cctx.clearRect(0, 0, cookie.width, cookie.height);
+        const r = CR + cookiePop;
+        cctx.fillStyle = "#c8862f";
+        cctx.beginPath();
+        cctx.arc(CX, CY, r, 0, Math.PI * 2);
+        cctx.fill();
+        cctx.fillStyle = "#5a3210";
+        const chips = [
+          [-20, -14],
+          [16, -20],
+          [24, 10],
+          [-10, 18],
+          [-26, 6],
+          [6, 0],
+        ];
+        chips.forEach(([dx, dy]) => {
+          cctx.beginPath();
+          cctx.arc(CX + dx, CY + dy, 5, 0, Math.PI * 2);
+          cctx.fill();
+        });
+      }
+      drawCookie();
+      cookie.addEventListener("mousedown", (e) => {
+        const r = cookie.getBoundingClientRect();
+        // The canvas is scaled by CSS; map the click to canvas pixels.
+        const x = (e.clientX - r.left) * (cookie.width / r.width);
+        const y = (e.clientY - r.top) * (cookie.height / r.height);
+        if ((x - CX) * (x - CX) + (y - CY) * (y - CY) <= CR * CR) {
+          bump("cookie", cookieCount);
+          cookiePop = 6;
+          drawCookie();
+          setTimeout(() => {
+            cookiePop = 0;
+            drawCookie();
+          }, 100);
+        }
       });
 
       // HUD: clicks-per-second over a rolling 1s window.
