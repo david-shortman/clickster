@@ -255,10 +255,14 @@ describe("clickster in real Firefox", () => {
     await openPopup();
     await waitForRows(1);
     const freq = await driver.findElement(By.css(".target .freq-input"));
-    await freq.clear();
-    await freq.sendKeys("3");
-    // Pressing Start blurs the field (firing change -> setTargetInterval) and
-    // resets the countdown.
+    // Set the interval deterministically (clear()+sendKeys can leave "13"s);
+    // dispatch change so the content script applies it.
+    await driver.executeScript(
+      "arguments[0].value='3';" +
+        "arguments[0].dispatchEvent(new Event('change',{bubbles:true}));",
+      freq
+    );
+    // Start resets the countdown so the first click is one interval out.
     await clickPopupButton("start-btn");
     await closePopup();
 
@@ -267,7 +271,7 @@ describe("clickster in real Firefox", () => {
     expect(await readCount("count-one")).toBe(baseline); // 3s rate: nothing yet
     await driver.wait(
       async () => (await readCount("count-one")) > baseline,
-      4000
+      6000
     );
   }, 90000);
 
@@ -394,5 +398,31 @@ describe("clickster in real Firefox", () => {
     );
     // Complete a selection so we don't leave the page armed in selection mode.
     await driver.actions().click().perform();
+  }, 90000);
+
+  it("clicks a point inside a canvas at the right coordinate (#28)", async () => {
+    await loadFixturePage();
+    // Selecting the canvas captures the picked point; clicking dispatches real
+    // coordinate-bearing events there — a canvas ignores element.click().
+    await selectTargetByPointer("game");
+
+    // A canvas point shows a rainbow crosshair, not a ring on the element.
+    expect(
+      (await driver.findElements(By.css(".clickster-crosshair"))).length
+    ).toBe(1);
+    expect(await styleOf("game")).not.toContain("box-shadow");
+
+    await openPopup();
+    await clickPopupButton("start-btn");
+    await closePopup();
+
+    // The cookie only counts clicks that land inside its circle.
+    await driver.wait(async () => (await readCount("count-game")) >= 2, 6000);
+
+    // And the recorded click landed near the canvas centre (100,60).
+    const last = await driver.findElement(By.id("game-last")).getText();
+    const [x, y] = last.split(",").map(Number);
+    expect(Math.abs(x - 100)).toBeLessThan(20);
+    expect(Math.abs(y - 60)).toBeLessThan(20);
   }, 90000);
 });

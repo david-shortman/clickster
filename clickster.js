@@ -73,13 +73,89 @@ document.addEventListener("mousemove", (event) => {
   }
 });
 
-function displayAsSelected(element) {
-  element.style.boxShadow = SELECTED_SHADOW;
+const RAINBOW_GRADIENT =
+  "linear-gradient(135deg, #b827fc, #2c90fc, #b8fd33, #fec837, #fd1892)";
+
+// Canvas/SVG/video render their own content and read mouse coordinates, so a
+// border ring around the whole element is meaningless — mark the exact point
+// with a crosshair instead.
+function isCrosshairTarget(element) {
+  if (element.namespaceURI === "http://www.w3.org/2000/svg") return true;
+  const tag = element.tagName ? element.tagName.toUpperCase() : "";
+  return (
+    tag === "CANVAS" || tag === "VIDEO" || tag === "OBJECT" || tag === "EMBED"
+  );
+}
+
+function markerPointFor(target) {
+  const ref = target.ref && target.ref.isConnected ? target.ref : null;
+  if (!ref || !ref.getBoundingClientRect) return null;
+  const rect = ref.getBoundingClientRect();
+  return {
+    x: rect.left + target.offsetX * rect.width,
+    y: rect.top + target.offsetY * rect.height,
+  };
+}
+
+function positionMarker(target) {
+  if (!target.markerEl) return;
+  const point = markerPointFor(target);
+  if (!point) return;
+  target.markerEl.style.left = point.x + "px";
+  target.markerEl.style.top = point.y + "px";
+}
+
+// A rainbow crosshair overlay at the target point. pointer-events:none so it
+// never intercepts the very clicks it marks (elementFromPoint skips it).
+function createMarker(target) {
+  const marker = document.createElement("div");
+  marker.className = "clickster-crosshair";
+  marker.style.cssText =
+    "position:fixed;left:0;top:0;width:0;height:0;pointer-events:none;z-index:2147483646;";
+  const hbar = document.createElement("div");
+  hbar.style.cssText =
+    "position:absolute;left:-16px;top:-1.5px;width:32px;height:3px;border-radius:2px;background:" +
+    RAINBOW_GRADIENT;
+  const vbar = document.createElement("div");
+  vbar.style.cssText =
+    "position:absolute;left:-1.5px;top:-16px;width:3px;height:32px;border-radius:2px;background:" +
+    RAINBOW_GRADIENT;
+  // A fixed-size circle that flashes on each click (the click emphasis).
+  const pulse = document.createElement("div");
+  pulse.className = "clickster-crosshair-pulse";
+  pulse.style.cssText =
+    "position:absolute;left:-13px;top:-13px;width:26px;height:26px;border-radius:50%;opacity:0;box-shadow:" +
+    SELECTED_SHADOW;
+  marker.appendChild(pulse);
+  marker.appendChild(hbar);
+  marker.appendChild(vbar);
+  document.body.appendChild(marker);
+  target.markerEl = marker;
+  positionMarker(target);
+}
+
+function removeMarker(target) {
+  if (target.markerEl) {
+    target.markerEl.remove();
+    target.markerEl = null;
+  }
+}
+
+function displayAsSelected(target) {
+  if (target.crosshair) {
+    if (!target.markerEl) createMarker(target);
+    else positionMarker(target);
+    return;
+  }
+  if (target.ref) target.ref.style.boxShadow = SELECTED_SHADOW;
 }
 
 function restoreHighlight(target) {
-  if (!target.ref) return;
-  target.ref.style.boxShadow = target.originalBoxShadow;
+  if (target.crosshair) {
+    removeMarker(target);
+    return;
+  }
+  if (target.ref) target.ref.style.boxShadow = target.originalBoxShadow;
 }
 
 function cssEscape(value) {
@@ -139,15 +215,59 @@ function persistTargets() {
         selector: t.selector,
         intervalMs: t.intervalMs,
         paused: t.paused,
+        offsetX: t.offsetX,
+        offsetY: t.offsetY,
       }))
     )
   );
 }
 
+function clamp01(value) {
+  return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+// Where, within an element, a click point sits — as a 0..1 fraction of its box
+// so it survives the element moving or resizing. Defaults to the center.
+function offsetWithin(element, point) {
+  const rect = element.getBoundingClientRect();
+  if (!point || !rect.width || !rect.height) {
+    return { x: 0.5, y: 0.5 };
+  }
+  return {
+    x: clamp01((point.x - rect.left) / rect.width),
+    y: clamp01((point.y - rect.top) / rect.height),
+  };
+}
+
 function addTarget(element, options) {
   options = options || {};
-  if (!element || targets.some((t) => t.ref === element)) return;
-  targets.push({
+  if (!element) return;
+
+  let offsetX = 0.5;
+  let offsetY = 0.5;
+  if (typeof options.offsetX === "number") {
+    offsetX = options.offsetX;
+    offsetY = options.offsetY;
+  } else if (options.point) {
+    const offset = offsetWithin(element, options.point);
+    offsetX = offset.x;
+    offsetY = offset.y;
+  }
+
+  // Dedupe by element + point so the same button isn't added twice, while still
+  // allowing several distinct points on one element (e.g. a <canvas>).
+  if (
+    targets.some(
+      (t) =>
+        t.ref === element &&
+        Math.abs(t.offsetX - offsetX) < 0.02 &&
+        Math.abs(t.offsetY - offsetY) < 0.02
+    )
+  ) {
+    return;
+  }
+
+  const target = {
     id: getNextId(),
     selector: options.selector || cssPathFor(element),
     label: labelFor(element),
@@ -156,9 +276,14 @@ function addTarget(element, options) {
     clickCount: 0,
     lastClickedAt: Date.now(),
     paused: !!options.paused,
+    offsetX,
+    offsetY,
+    crosshair: isCrosshairTarget(element),
+    markerEl: null,
     originalBoxShadow: element.style.boxShadow,
-  });
-  displayAsSelected(element);
+  };
+  targets.push(target);
+  displayAsSelected(target);
 }
 
 function removeTarget(id) {
@@ -215,10 +340,22 @@ function showTarget(id) {
   }, 1200);
 }
 
-// A smooth "squish" on each click: the ring bulges thicker, then springs back.
-// Uses the Web Animations API so it overlays the computed style without
-// touching the inline box-shadow (and is a no-op where animate is unavailable).
+// A smooth "squish" on each click. For a crosshair target it's a fixed-size
+// circle flashing around the crosshair; otherwise the box-shadow ring bulges.
+// Uses the Web Animations API (a no-op where animate is unavailable).
 function pulseClicked(target) {
+  if (target.crosshair) {
+    const pulse = target.markerEl
+      ? target.markerEl.querySelector(".clickster-crosshair-pulse")
+      : null;
+    if (pulse && pulse.animate) {
+      pulse.animate(
+        [{ opacity: 0 }, { opacity: 0.95, offset: 0.15 }, { opacity: 0 }],
+        { duration: 320, easing: "ease-out" }
+      );
+    }
+    return;
+  }
   const element = target.ref;
   if (!element || !element.animate) return;
   element.animate(
@@ -247,9 +384,41 @@ function resolveTarget(target) {
   if (found) {
     target.ref = found;
     target.originalBoxShadow = found.style.boxShadow;
-    displayAsSelected(found);
+    displayAsSelected(target);
   }
   return found;
+}
+
+// Click via real coordinate-bearing events at (clientX, clientY) — not
+// element.click() — so it works for canvas/coordinate games and for sites that
+// ignore synthetic clicks. Dispatches on whatever element is actually at the
+// point. Events are isTrusted:false (not an anti-cheat bypass).
+function dispatchClickAt(clientX, clientY) {
+  const target = document.elementFromPoint(clientX, clientY);
+  if (!target || typeof target.dispatchEvent !== "function") return;
+  const base = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    clientX,
+    clientY,
+    screenX: clientX,
+    screenY: clientY,
+    button: 0,
+  };
+  const hasPointer = typeof PointerEvent === "function";
+  const pointer = (buttons) => ({
+    ...base,
+    buttons,
+    pointerId: 1,
+    pointerType: "mouse",
+    isPrimary: true,
+  });
+  if (hasPointer) target.dispatchEvent(new PointerEvent("pointerdown", pointer(1)));
+  target.dispatchEvent(new MouseEvent("mousedown", { ...base, buttons: 1 }));
+  if (hasPointer) target.dispatchEvent(new PointerEvent("pointerup", pointer(0)));
+  target.dispatchEvent(new MouseEvent("mouseup", { ...base, buttons: 0 }));
+  target.dispatchEvent(new MouseEvent("click", { ...base, buttons: 0 }));
 }
 
 function tick() {
@@ -258,15 +427,32 @@ function tick() {
   targets.forEach((target) => {
     if (target.paused) return;
     const ref = resolveTarget(target);
-    if (!ref || !ref.click) return;
+    if (!ref || !ref.getBoundingClientRect) return;
+    const rect = ref.getBoundingClientRect();
+    const x = rect.left + target.offsetX * rect.width;
+    const y = rect.top + target.offsetY * rect.height;
+    // Keep the crosshair following the point (scroll, resize, re-render).
+    if (target.crosshair && target.markerEl) {
+      target.markerEl.style.left = x + "px";
+      target.markerEl.style.top = y + "px";
+    }
     if (now - target.lastClickedAt >= target.intervalMs) {
-      ref.click();
+      dispatchClickAt(x, y);
       target.clickCount += 1;
       target.lastClickedAt = now;
       pulseClicked(target);
     }
   });
 }
+
+// Crosshairs also follow scroll while clicking is stopped.
+window.addEventListener(
+  "scroll",
+  () => {
+    targets.forEach(positionMarker);
+  },
+  true
+);
 
 function startClicking() {
   if (clicksterEnabled && !tickerId) {
@@ -299,8 +485,11 @@ function setSelectedElement(event) {
   removeHoverHighlight(lastHoveredElement);
 
   // Additive: each selection adds a target to the list (removed individually
-  // from the popup), rather than replacing the previous one.
-  addTarget(document.elementFromPoint(clientX, clientY));
+  // from the popup), rather than replacing the previous one. The point the user
+  // clicked becomes the target's offset within the element.
+  addTarget(document.elementFromPoint(clientX, clientY), {
+    point: { x: clientX, y: clientY },
+  });
   persistTargets();
 
   isSelectionModeEnabled = false;
@@ -429,9 +618,11 @@ function restoreTargets() {
         ? entry.intervalMs
         : DEFAULT_INTERVAL_MS;
     const paused = typeof entry === "object" ? !!entry.paused : false;
+    const offsetX = typeof entry === "object" ? entry.offsetX : undefined;
+    const offsetY = typeof entry === "object" ? entry.offsetY : undefined;
     try {
       document.body.querySelectorAll(selector).forEach((element) => {
-        addTarget(element, { selector, intervalMs, paused });
+        addTarget(element, { selector, intervalMs, paused, offsetX, offsetY });
       });
     } catch (e) {
       // Ignore selectors that no longer parse or match on this page.

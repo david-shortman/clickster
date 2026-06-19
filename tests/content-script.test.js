@@ -4,9 +4,29 @@ import { installBrowserMock, loadScript } from "./helpers.js";
 // DEFAULT_INTERVAL_MS in the content script.
 const INTERVAL_MS = 1000;
 
+// jsdom has no layout, so give elements fake rects and a hit-testing
+// elementFromPoint — coordinate clicking is geometry, so the harness must model
+// it. place() assigns a rect; hitTest() finds the topmost placed element.
+function place(el, x, y, w, h) {
+  el.__rect = { left: x, top: y, right: x + w, bottom: y + h, width: w, height: h, x, y };
+  el.getBoundingClientRect = () => el.__rect;
+  return el;
+}
+function hitTest(x, y) {
+  const placed = [...document.querySelectorAll("*")].filter((e) => e.__rect);
+  for (let i = placed.length - 1; i >= 0; i -= 1) {
+    const r = placed[i].__rect;
+    if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) return placed[i];
+  }
+  return null;
+}
+function centerOf(el) {
+  const r = el.__rect;
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
 describe("clickster content script", () => {
   let browser;
-  let elementUnderCursor;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -16,10 +36,10 @@ describe("clickster content script", () => {
       <button id="other" class="bulk">One</button>
       <button id="another" class="bulk">Two</button>
     `;
-    // jsdom has no layout, so elementFromPoint is stubbed; tests set
-    // elementUnderCursor to whatever the simulated cursor is over.
-    document.elementFromPoint = () => elementUnderCursor;
-    elementUnderCursor = null;
+    place(document.getElementById("target"), 0, 0, 100, 40);
+    place(document.getElementById("other"), 0, 50, 100, 40);
+    place(document.getElementById("another"), 0, 100, 100, 40);
+    document.elementFromPoint = hitTest;
     // jsdom doesn't implement scrollIntoView.
     Element.prototype.scrollIntoView = () => {};
     browser = installBrowserMock();
@@ -32,12 +52,14 @@ describe("clickster content script", () => {
   });
 
   function hoverAndSelect(element) {
+    const c = centerOf(element);
     browser.emit("SELECT_ELEMENT_CLICKED");
-    elementUnderCursor = element;
     document.dispatchEvent(
-      new MouseEvent("mousemove", { clientX: 10, clientY: 10 })
+      new MouseEvent("mousemove", { clientX: c.x, clientY: c.y })
     );
-    document.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    document.dispatchEvent(
+      new MouseEvent("click", { clientX: c.x, clientY: c.y, bubbles: true })
+    );
   }
 
   function countClicks(element) {
@@ -75,9 +97,9 @@ describe("clickster content script", () => {
 
     it("adds the hovered element on Enter", () => {
       browser.emit("SELECT_ELEMENT_CLICKED");
-      elementUnderCursor = document.getElementById("target");
+      const c = centerOf(document.getElementById("target"));
       document.dispatchEvent(
-        new MouseEvent("mousemove", { clientX: 10, clientY: 10 })
+        new MouseEvent("mousemove", { clientX: c.x, clientY: c.y })
       );
       document.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter" }));
       expect(state().targets).toHaveLength(1);
@@ -86,14 +108,19 @@ describe("clickster content script", () => {
     it("builds an :nth-of-type selector for a target with no id", () => {
       document.body.innerHTML =
         '<div id="panel"><button>Alpha</button><button>Beta</button></div>';
-      const beta = document.body.querySelectorAll("#panel button")[1];
+      const buttons = document.body.querySelectorAll("#panel button");
+      place(buttons[0], 0, 0, 100, 40);
+      place(buttons[1], 0, 50, 100, 40);
+      const beta = buttons[1];
 
       browser.emit("SELECT_ELEMENT_CLICKED");
-      elementUnderCursor = beta;
+      const c = centerOf(beta);
       document.dispatchEvent(
-        new MouseEvent("mousemove", { clientX: 10, clientY: 10 })
+        new MouseEvent("mousemove", { clientX: c.x, clientY: c.y })
       );
-      document.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      document.dispatchEvent(
+        new MouseEvent("click", { clientX: c.x, clientY: c.y, bubbles: true })
+      );
 
       const stored = JSON.parse(localStorage.getItem("clicksterTargets"));
       expect(stored[0].selector).toContain(":nth-of-type(2)");
@@ -111,29 +138,29 @@ describe("clickster content script", () => {
 
     it("clears the hover highlight when the cursor crosses the background", () => {
       const a = document.getElementById("target");
+      const c = centerOf(a);
       browser.emit("SELECT_ELEMENT_CLICKED");
 
-      elementUnderCursor = a;
       document.dispatchEvent(
-        new MouseEvent("mousemove", { clientX: 10, clientY: 10 })
+        new MouseEvent("mousemove", { clientX: c.x, clientY: c.y })
       );
       expect(a.style.border).toContain("red");
 
-      // Move onto the page background (a gap between elements).
-      elementUnderCursor = document.body;
+      // Move onto the page background (a point over no element).
       document.dispatchEvent(
-        new MouseEvent("mousemove", { clientX: 11, clientY: 11 })
+        new MouseEvent("mousemove", { clientX: 500, clientY: 500 })
       );
       expect(a.style.border).not.toContain("red");
 
       // Complete a selection so this script doesn't stay armed in selection
       // mode — the jsdom document and its listeners persist across tests, so a
       // script left mid-selection would hijack the next test's click.
-      elementUnderCursor = a;
       document.dispatchEvent(
-        new MouseEvent("mousemove", { clientX: 10, clientY: 10 })
+        new MouseEvent("mousemove", { clientX: c.x, clientY: c.y })
       );
-      document.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      document.dispatchEvent(
+        new MouseEvent("click", { clientX: c.x, clientY: c.y, bubbles: true })
+      );
     });
 
     it("removes a target and restores its highlight", () => {
@@ -226,6 +253,7 @@ describe("clickster content script", () => {
       const fresh = document.createElement("button");
       fresh.id = "target";
       document.body.appendChild(fresh);
+      place(fresh, 0, 0, 100, 40);
       const freshClicks = countClicks(fresh);
 
       vi.advanceTimersByTime(INTERVAL_MS * 2);
@@ -297,6 +325,46 @@ describe("clickster content script", () => {
       hoverAndSelect(target);
       browser.emit({ showTargetId: state().targets[0].id });
       expect(target.style.outline).toContain("solid");
+    });
+  });
+
+  describe("crosshair targets (canvas/svg/video)", () => {
+    function selectCanvas() {
+      document.body.innerHTML = '<canvas id="game"></canvas>';
+      const canvas = place(document.getElementById("game"), 20, 20, 200, 100);
+      hoverAndSelect(canvas);
+      return canvas;
+    }
+
+    it("marks a canvas with a crosshair, not a ring on the element", () => {
+      const canvas = selectCanvas();
+      expect(canvas.style.boxShadow).toBe("");
+      const marker = document.querySelector(".clickster-crosshair");
+      expect(marker).not.toBeNull();
+      // Positioned at the picked point (the canvas centre).
+      expect(marker.style.left).toBe("120px");
+      expect(marker.style.top).toBe("70px");
+    });
+
+    it("removes the crosshair when the target is removed", () => {
+      selectCanvas();
+      expect(document.querySelector(".clickster-crosshair")).not.toBeNull();
+      browser.emit({ removeTargetId: state().targets[0].id });
+      expect(document.querySelector(".clickster-crosshair")).toBeNull();
+    });
+
+    it("flashes the click-emphasis circle on each click", () => {
+      const animate = vi.fn();
+      const original = Element.prototype.animate;
+      Element.prototype.animate = animate;
+      try {
+        selectCanvas();
+        browser.emit("START_CLICKING");
+        vi.advanceTimersByTime(INTERVAL_MS * 2);
+        expect(animate).toHaveBeenCalledTimes(2);
+      } finally {
+        Element.prototype.animate = original;
+      }
     });
   });
 
