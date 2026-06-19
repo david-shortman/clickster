@@ -402,6 +402,12 @@ describe("clickster in real Firefox", () => {
     // coordinate-bearing events there — a canvas ignores element.click().
     await selectTargetByPointer("game");
 
+    // A canvas point shows a rainbow crosshair, not a ring on the element.
+    expect(
+      (await driver.findElements(By.css(".clickster-crosshair"))).length
+    ).toBe(1);
+    expect(await styleOf("game")).not.toContain("box-shadow");
+
     await openPopup();
     await clickPopupButton("start-btn");
     await closePopup();

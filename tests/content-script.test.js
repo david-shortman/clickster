@@ -328,6 +328,46 @@ describe("clickster content script", () => {
     });
   });
 
+  describe("crosshair targets (canvas/svg/video)", () => {
+    function selectCanvas() {
+      document.body.innerHTML = '<canvas id="game"></canvas>';
+      const canvas = place(document.getElementById("game"), 20, 20, 200, 100);
+      hoverAndSelect(canvas);
+      return canvas;
+    }
+
+    it("marks a canvas with a crosshair, not a ring on the element", () => {
+      const canvas = selectCanvas();
+      expect(canvas.style.boxShadow).toBe("");
+      const marker = document.querySelector(".clickster-crosshair");
+      expect(marker).not.toBeNull();
+      // Positioned at the picked point (the canvas centre).
+      expect(marker.style.left).toBe("120px");
+      expect(marker.style.top).toBe("70px");
+    });
+
+    it("removes the crosshair when the target is removed", () => {
+      selectCanvas();
+      expect(document.querySelector(".clickster-crosshair")).not.toBeNull();
+      browser.emit({ removeTargetId: state().targets[0].id });
+      expect(document.querySelector(".clickster-crosshair")).toBeNull();
+    });
+
+    it("flashes the click-emphasis circle on each click", () => {
+      const animate = vi.fn();
+      const original = Element.prototype.animate;
+      Element.prototype.animate = animate;
+      try {
+        selectCanvas();
+        browser.emit("START_CLICKING");
+        vi.advanceTimersByTime(INTERVAL_MS * 2);
+        expect(animate).toHaveBeenCalledTimes(2);
+      } finally {
+        Element.prototype.animate = original;
+      }
+    });
+  });
+
   describe("persistence across reload (#11)", () => {
     // A fresh script run against the same DOM + localStorage is what a real
     // page reload looks like. Clear timers first, since navigating away tears
