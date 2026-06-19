@@ -110,28 +110,70 @@ function positionMarker(target) {
 function createMarker(target) {
   const marker = document.createElement("div");
   marker.className = "clickster-crosshair";
+  // The container is 0x0 (no hit area); its parts are pointer-events:none so
+  // they never intercept the clicks they mark. Only the drag handle becomes
+  // interactive, and only while clicking is stopped.
   marker.style.cssText =
-    "position:fixed;left:0;top:0;width:0;height:0;pointer-events:none;z-index:2147483646;";
+    "position:fixed;left:0;top:0;width:0;height:0;z-index:2147483646;";
   const hbar = document.createElement("div");
   hbar.style.cssText =
-    "position:absolute;left:-16px;top:-1.5px;width:32px;height:3px;border-radius:2px;background:" +
+    "position:absolute;left:-16px;top:-1.5px;width:32px;height:3px;border-radius:2px;pointer-events:none;background:" +
     RAINBOW_GRADIENT;
   const vbar = document.createElement("div");
   vbar.style.cssText =
-    "position:absolute;left:-1.5px;top:-16px;width:3px;height:32px;border-radius:2px;background:" +
+    "position:absolute;left:-1.5px;top:-16px;width:3px;height:32px;border-radius:2px;pointer-events:none;background:" +
     RAINBOW_GRADIENT;
   // A fixed-size circle that flashes on each click (the click emphasis).
   const pulse = document.createElement("div");
   pulse.className = "clickster-crosshair-pulse";
   pulse.style.cssText =
-    "position:absolute;left:-13px;top:-13px;width:26px;height:26px;border-radius:50%;opacity:0;box-shadow:" +
+    "position:absolute;left:-13px;top:-13px;width:26px;height:26px;border-radius:50%;opacity:0;pointer-events:none;box-shadow:" +
     SELECTED_SHADOW;
+  // Transparent drag handle to nudge the exact pixel (only while stopped).
+  const handle = document.createElement("div");
+  handle.className = "clickster-crosshair-handle";
+  handle.style.cssText =
+    "position:absolute;left:-18px;top:-18px;width:36px;height:36px;border-radius:50%;cursor:move;pointer-events:" +
+    (clicksterEnabled ? "none" : "auto");
+  handle.addEventListener("mousedown", (event) => {
+    if (clicksterEnabled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    draggingTarget = target;
+  });
   marker.appendChild(pulse);
   marker.appendChild(hbar);
   marker.appendChild(vbar);
+  marker.appendChild(handle);
   document.body.appendChild(marker);
   target.markerEl = marker;
   positionMarker(target);
+}
+
+// While a crosshair handle is grabbed, move the point with the cursor and
+// recompute its offset within the anchor.
+let draggingTarget = null;
+document.addEventListener("mousemove", (event) => {
+  if (!draggingTarget || !draggingTarget.ref) return;
+  const rect = draggingTarget.ref.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  draggingTarget.offsetX = clamp01((event.clientX - rect.left) / rect.width);
+  draggingTarget.offsetY = clamp01((event.clientY - rect.top) / rect.height);
+  positionMarker(draggingTarget);
+});
+document.addEventListener("mouseup", () => {
+  if (draggingTarget) {
+    persistTargets();
+    draggingTarget = null;
+  }
+});
+
+function setMarkersInteractive(interactive) {
+  targets.forEach((t) => {
+    if (!t.markerEl) return;
+    const handle = t.markerEl.querySelector(".clickster-crosshair-handle");
+    if (handle) handle.style.pointerEvents = interactive ? "auto" : "none";
+  });
 }
 
 function removeMarker(target) {
@@ -669,10 +711,12 @@ browser.runtime.onMessage.addListener(function (message) {
     targets.forEach((target) => {
       target.lastClickedAt = now;
     });
+    setMarkersInteractive(false);
     startClicking();
   } else if (message === "STOP_CLICKING") {
     setClicksterEnabled(false);
     stopClicking();
+    setMarkersInteractive(true);
   } else if (message && message.removeTargetId !== undefined) {
     removeTarget(message.removeTargetId);
   } else if (message && message.setTargetInterval) {

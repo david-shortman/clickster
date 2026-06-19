@@ -451,4 +451,34 @@ describe("clickster in real Firefox", () => {
     expect(Math.abs(x - 100)).toBeLessThan(20);
     expect(Math.abs(y - 60)).toBeLessThan(20);
   }, 90000);
+
+  it("drags the crosshair to fine-tune the canvas point (#33)", async () => {
+    await loadFixturePage();
+    await selectTargetByPointer("game"); // crosshair at the canvas centre
+
+    // While stopped, drag the crosshair handle 30px to the right.
+    const handle = await driver.findElement(
+      By.css(".clickster-crosshair-handle")
+    );
+    await driver
+      .actions()
+      .move({ origin: handle })
+      .press()
+      .move({ origin: "pointer", x: 30, y: 0 })
+      .release()
+      .perform();
+
+    // Start; clicks now land right of centre (canvas x > 110).
+    await openPopup();
+    await clickPopupButton("start-btn");
+    await closePopup();
+    await driver.wait(
+      async () => {
+        const last = await driver.findElement(By.id("game-last")).getText();
+        return Number(last.split(",")[0]) > 110;
+      },
+      6000,
+      "drag did not move the click point"
+    );
+  }, 90000);
 });
