@@ -276,6 +276,22 @@ describe("clickster content script", () => {
       }
     });
 
+    it("does not click an element occluding the target's point (#35)", () => {
+      const target = document.getElementById("target");
+      hoverAndSelect(target);
+
+      // An overlay covering the target's point wins the hit-test.
+      const occluder = place(document.createElement("div"), 0, 0, 100, 40);
+      document.body.appendChild(occluder);
+      const occluderClicks = countClicks(occluder);
+
+      browser.emit("START_CLICKING");
+      vi.advanceTimersByTime(INTERVAL_MS * 2);
+
+      expect(occluderClicks).not.toHaveBeenCalled();
+      expect(state().targets[0].clickCount).toBe(0);
+    });
+
     it("pauses and resumes an individual target", () => {
       const target = document.getElementById("target");
       const other = document.getElementById("other");
@@ -344,6 +360,25 @@ describe("clickster content script", () => {
       // Positioned at the picked point (the canvas centre).
       expect(marker.style.left).toBe("120px");
       expect(marker.style.top).toBe("70px");
+    });
+
+    it("drags the crosshair to reposition the point while stopped (#33)", () => {
+      const canvas = selectCanvas(); // canvas at 20,20,200,100 → offset 0.5,0.5
+      const handle = document.querySelector(".clickster-crosshair-handle");
+
+      handle.dispatchEvent(
+        new MouseEvent("mousedown", { clientX: 120, clientY: 70, bubbles: true })
+      );
+      // Drag to (60, 45): offset (60-20)/200=0.2, (45-20)/100=0.25.
+      document.dispatchEvent(
+        new MouseEvent("mousemove", { clientX: 60, clientY: 45, bubbles: true })
+      );
+      document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+
+      const stored = JSON.parse(localStorage.getItem("clicksterTargets"));
+      expect(stored[0].offsetX).toBeCloseTo(0.2);
+      expect(stored[0].offsetY).toBeCloseTo(0.25);
+      expect(canvas).toBeTruthy();
     });
 
     it("removes the crosshair when the target is removed", () => {
