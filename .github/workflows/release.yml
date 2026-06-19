@@ -1,0 +1,49 @@
+name: Release
+
+# Cuts a GitHub Release with the packaged extension zip whenever the
+# manifest version changes on main (or on demand). The same zip can be
+# uploaded to AMO.
+on:
+  push:
+    branches: [main]
+    paths: ["manifest.json"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - id: meta
+        run: echo "version=$(node -p "require('./manifest.json').version")" >> "$GITHUB_OUTPUT"
+
+      - id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.meta.outputs.version }}" >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.exists.outputs.found == 'false'
+        run: |
+          npm run build
+          mv dist/clickster.zip "clickster-${{ steps.meta.outputs.version }}.zip"
+
+      - if: steps.exists.outputs.found == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.meta.outputs.version }}" \
+            "clickster-${{ steps.meta.outputs.version }}.zip" \
+            --title "Clickster v${{ steps.meta.outputs.version }}" \
+            --generate-notes
