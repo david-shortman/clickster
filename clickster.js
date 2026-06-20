@@ -431,16 +431,12 @@ function resolveTarget(target) {
   return found;
 }
 
-// Click via real coordinate-bearing events at (clientX, clientY) — not
-// element.click() — so it works for canvas/coordinate games and for sites that
-// ignore synthetic clicks. Dispatches on whatever element is actually at the
-// point. Events are isTrusted:false (not an anti-cheat bypass).
-function dispatchClickAt(clientX, clientY, anchor) {
-  const target = document.elementFromPoint(clientX, clientY);
+// Dispatch a full real click (pointer + mouse sequence) on `target` at the
+// given viewport coordinates — not element.click() — so it works for
+// canvas/coordinate games and for sites that ignore synthetic clicks. Events
+// are isTrusted:false (not an anti-cheat bypass).
+function dispatchClickSequence(target, clientX, clientY) {
   if (!target || typeof target.dispatchEvent !== "function") return false;
-  // Skip if the anchor isn't actually at this point — scrolled off-screen, or
-  // hidden behind a modal/overlay — so we never click the wrong element.
-  if (anchor && anchor !== target && !anchor.contains(target)) return false;
   const base = {
     bubbles: true,
     cancelable: true,
@@ -467,6 +463,20 @@ function dispatchClickAt(clientX, clientY, anchor) {
   return true;
 }
 
+// Click whatever element is actually at (clientX, clientY). Returns false when
+// the anchor isn't the element at that point — i.e. it's hidden behind a
+// modal/overlay — so we never click the wrong element.
+function dispatchClickAt(clientX, clientY, anchor) {
+  const target = document.elementFromPoint(clientX, clientY);
+  if (!target) return false;
+  if (anchor && anchor !== target && !anchor.contains(target)) return false;
+  return dispatchClickSequence(target, clientX, clientY);
+}
+
+function pointInViewport(x, y) {
+  return x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight;
+}
+
 function tick() {
   if (!clicksterEnabled) return;
   const now = Date.now();
@@ -483,9 +493,21 @@ function tick() {
       target.markerEl.style.top = y + "px";
     }
     if (now - target.lastClickedAt >= target.intervalMs) {
-      // Only count it if the click actually reached the target; otherwise
-      // (off-screen / occluded) leave it due and retry next tick.
-      if (dispatchClickAt(x, y, ref)) {
+      let clicked;
+      if (target.crosshair) {
+        // A canvas/coordinate point is only meaningful at an on-screen
+        // coordinate — if it's scrolled away there's nothing to click.
+        clicked = dispatchClickAt(x, y, ref);
+      } else if (pointInViewport(x, y)) {
+        // Visible element: hit-test the point so a modal/overlay covering it
+        // skips the click (we don't click the wrong element).
+        clicked = dispatchClickAt(x, y, ref);
+      } else {
+        // Element scrolled out of view: click it directly so auto-clicking
+        // keeps going while the user scrolls or reads elsewhere.
+        clicked = dispatchClickSequence(ref, x, y);
+      }
+      if (clicked) {
         target.clickCount += 1;
         target.lastClickedAt = now;
         pulseClicked(target);

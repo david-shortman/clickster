@@ -292,6 +292,24 @@ describe("clickster content script", () => {
       expect(state().targets[0].clickCount).toBe(0);
     });
 
+    it("keeps clicking an element after it scrolls out of view (#5)", () => {
+      const target = document.getElementById("target");
+      const clicks = countClicks(target);
+      hoverAndSelect(target);
+      browser.emit("START_CLICKING");
+      vi.advanceTimersByTime(INTERVAL_MS);
+      expect(clicks).toHaveBeenCalledTimes(1);
+
+      // Scroll the target far below the viewport — its click point is now
+      // off-screen. Unlike an occluder (in viewport, blocked), an off-screen
+      // element should keep being clicked directly.
+      place(target, 0, window.innerHeight + 500, 100, 40);
+      vi.advanceTimersByTime(INTERVAL_MS * 2);
+
+      expect(clicks).toHaveBeenCalledTimes(3);
+      expect(state().targets[0].clickCount).toBe(3);
+    });
+
     it("pauses and resumes an individual target", () => {
       const target = document.getElementById("target");
       const other = document.getElementById("other");
