@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { By, Key, until } from "selenium-webdriver";
 import {
+  BROWSER,
   buildDriver,
   findTabIdByUrl,
   navigateTo,
@@ -143,7 +144,7 @@ afterAll(async () => {
   if (server) server.close();
 });
 
-describe("clickster in real Firefox", () => {
+describe(`clickster in ${BROWSER}`, () => {
   it("selects an element, clicks it, and stops", async () => {
     await loadFixturePage();
     await selectTargetByPointer("one");
