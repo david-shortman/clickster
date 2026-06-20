@@ -12,6 +12,7 @@
     "build:firefox": "node tools/build-firefox.mjs",
     "build:stores": "npm run build:chrome && npm run build:firefox",
     "test:e2e:chrome": "npm run build:chrome && BROWSER=chrome vitest run --config vitest.e2e.config.js",
+    "test:e2e:firefox:narrow": "npm run build:firefox && CLICKSTER_NARROW=1 vitest run --config vitest.e2e.config.js e2e/narrow.firefox.e2e.test.js",
     "lint": "web-ext lint --source-dir . --ignore-files 'dist/**' 'node_modules/**' 'tests/**' 'e2e/**' 'playground/**' 'tools/**' 'screenshots/**' '.github/**' 'promo*.png' 'example.gif' 'test.html' '.prettierrc' '.gitattributes' 'PRIVACY_POLICY.md' 'README.md' 'ROADMAP.md' 'package.json' 'package-lock.json' 'vitest.config.js' 'vitest.e2e.config.js'",
     "build": "mkdir -p dist && rm -f dist/clickster.zip && zip -r dist/clickster.zip manifest.json clickster.js popup icons LICENSE"
   },

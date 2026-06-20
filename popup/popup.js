@@ -78,7 +78,11 @@ async function armSelection() {
   }
   let armed = false;
   try {
-    armed = await sendRuntime({ clicksterArm: true });
+    const message = { clicksterArm: true };
+    // E2E: pin the worker to the page-under-test (WebDriver can't open the
+    // real browser-action popup, so the popup tab is the "active" one).
+    if (testTabId !== null) message.tabId = Number(testTabId);
+    armed = await sendRuntime(message);
   } catch (e) {
     armed = false;
   }

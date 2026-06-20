@@ -106,6 +106,25 @@ describe("clickster background worker (Chrome MV3)", () => {
     expect(chrome.scripting.registerContentScripts).not.toHaveBeenCalled();
   });
 
+  it("honors an explicit target tab id (E2E hook)", async () => {
+    const chrome = installChromeMock({ granted: true, present: false });
+    const onMessage = loadBackground();
+
+    onMessage({ clicksterArm: true, tabId: 5 }, {}, vi.fn());
+    await flushMicrotasks();
+
+    expect(chrome.tabs.query).not.toHaveBeenCalled(); // didn't fall back to active tab
+    expect(chrome.scripting.executeScript).toHaveBeenCalledWith({
+      target: { tabId: 5 },
+      files: ["clickster.js"],
+    });
+    expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
+      5,
+      "SELECT_ELEMENT_CLICKED",
+      expect.any(Function)
+    );
+  });
+
   it("skips registration when host access has not been granted", async () => {
     const chrome = installChromeMock({ granted: false, present: false });
     const onMessage = loadBackground();

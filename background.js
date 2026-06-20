@@ -139,9 +139,11 @@ function sendTab(tabId, message) {
 
 // The popup's "Select an element" handoff: make sure the content script is
 // present (and registered for the future when access is broad), then arm it.
-async function arm() {
+// `tabId` is normally the active tab; the popup passes an explicit id only in
+// E2E, where the popup runs as its own tab.
+async function arm(tabId) {
   await ensureRegistered();
-  const tabId = await activeTabId();
+  if (tabId == null) tabId = await activeTabId();
   if (tabId == null) return;
   await ensureInjected(tabId);
   await sendTab(tabId, "SELECT_ELEMENT_CLICKED");
@@ -149,7 +151,7 @@ async function arm() {
 
 api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && message.clicksterArm) {
-    arm().then(
+    arm(message.tabId).then(
       () => sendResponse(true),
       () => sendResponse(false)
     );

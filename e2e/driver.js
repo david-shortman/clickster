@@ -13,6 +13,11 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // Which browser to drive: BROWSER=chrome | firefox (default firefox).
 export const BROWSER = process.env.BROWSER || "firefox";
 
+// CLICKSTER_NARROW=1 drives the narrowed store build (activeTab + optional host
+// access) instead of the broad dev build. Firefox only — see e2e/README.md for
+// why Chrome's optional-permission grant can't be auto-accepted in WebDriver.
+export const NARROW = process.env.CLICKSTER_NARROW === "1";
+
 // Firefox: fixed UUID seeded via the extensions.webextensions.uuids pref so
 // moz-extension:// URLs are deterministic (Privacy Badger/Ghostery technique).
 const FIREFOX_EXTENSION_ID = "{d9a80c5d-e4ea-4d11-8437-aedf73f2028b}";
@@ -73,6 +78,13 @@ async function buildFirefoxDriver() {
   // opened aren't script-opened, so allow scripted close to keep that flow
   // deterministic in tests.
   options.setPreference("dom.allow_scripts_to_close_windows", true);
+  // Narrow build: auto-grant runtime optional-permission requests instead of
+  // showing the door hanger, so permissions.request() resolves granted. This
+  // is exactly how Firefox itself skips the prompt (ext-permissions.js gates
+  // the prompt on this pref, then grants).
+  if (NARROW) {
+    options.setPreference("extensions.webextOptionalPermissionPrompts", false);
+  }
 
   const builder = new Builder()
     .forBrowser(Browser.FIREFOX)
@@ -85,8 +97,10 @@ async function buildFirefoxDriver() {
   const driver = await builder.build();
 
   // Temporary install accepts our unsigned zip on stock Firefox — the same
-  // mechanism as about:debugging's "Load Temporary Add-on".
-  await driver.installAddon(resolve(repoRoot, "dist/clickster.zip"), true);
+  // mechanism as about:debugging's "Load Temporary Add-on". The narrow build
+  // ships the activeTab + optional-host manifest and a background page.
+  const addon = NARROW ? "dist/clickster-firefox.zip" : "dist/clickster.zip";
+  await driver.installAddon(resolve(repoRoot, addon), true);
   return driver;
 }
 
