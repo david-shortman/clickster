@@ -190,6 +190,30 @@ describe("clickster popup", () => {
     expect(window.close).toHaveBeenCalled();
   });
 
+  it("toggles the settings panel with the gear button", () => {
+    expect(hidden("settings")).toBe(true);
+    document.getElementById("settings-btn").click();
+    expect(hidden("settings")).toBe(false);
+    document.getElementById("settings-btn").click();
+    expect(hidden("settings")).toBe(true);
+  });
+
+  it("sends the new default rate when the settings input changes (#7)", async () => {
+    const input = document.getElementById("default-interval");
+    input.value = "4";
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await flushMicrotasks();
+    expect(browser.tabs.sendMessage.mock.calls).toContainEqual([
+      TAB_ID,
+      { setDefaultInterval: { seconds: "4" } },
+    ]);
+  });
+
+  it("reflects the stored default rate in the settings input (#7)", () => {
+    emitState({ enabled: false, targets: [], defaultIntervalSeconds: 6 });
+    expect(document.getElementById("default-interval").value).toBe("6");
+  });
+
   it("sends removeTargetId when a row's remove button is clicked", async () => {
     emitState({ enabled: true, targets: [makeTarget({ id: 9 })] });
     document.querySelector(".remove-btn").click();

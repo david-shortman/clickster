@@ -105,6 +105,15 @@ document
   .getElementById("stop-btn")
   .addEventListener("click", () => send("STOP_CLICKING"));
 
+const settings = document.getElementById("settings");
+document
+  .getElementById("settings-btn")
+  .addEventListener("click", () => settings.classList.toggle("hidden"));
+const defaultInput = document.getElementById("default-interval");
+defaultInput.addEventListener("change", () =>
+  send({ setDefaultInterval: { seconds: defaultInput.value } })
+);
+
 const list = document.getElementById("targets-list");
 let renderedIds = "";
 
@@ -199,6 +208,14 @@ function renderState(state) {
     .classList.toggle("hidden", !state.enabled);
   document.getElementById("start-btn").classList.toggle("hidden", state.enabled);
   document.getElementById("stop-btn").classList.toggle("hidden", !state.enabled);
+
+  // Reflect the stored default rate, but don't clobber the field mid-edit.
+  if (
+    state.defaultIntervalSeconds != null &&
+    document.activeElement !== defaultInput
+  ) {
+    defaultInput.value = state.defaultIntervalSeconds;
+  }
 
   const ids = state.targets.map((t) => t.id).join(",");
   if (ids !== renderedIds) {

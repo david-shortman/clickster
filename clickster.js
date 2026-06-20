@@ -352,10 +352,16 @@ function setTargetInterval(id, seconds) {
   const value = Number(seconds);
   if (!isFinite(value) || value <= 0) return;
   target.intervalMs = value * 1000;
-  // Remember this rate as the default for the next target the user selects.
-  defaultIntervalMs = target.intervalMs;
-  localStorage.setItem("clicksterDefaultIntervalMs", String(defaultIntervalMs));
   persistTargets();
+}
+
+// The default rate applied to newly selected targets, set from the popup's
+// settings and remembered across reloads (#7).
+function setDefaultInterval(seconds) {
+  const value = Number(seconds);
+  if (!isFinite(value) || value <= 0) return;
+  defaultIntervalMs = value * 1000;
+  localStorage.setItem("clicksterDefaultIntervalMs", String(defaultIntervalMs));
 }
 
 function setTargetPaused(id, paused) {
@@ -591,6 +597,7 @@ function sendState() {
   browser.runtime.sendMessage({
     clicksterState: {
       enabled: clicksterEnabled,
+      defaultIntervalSeconds: defaultIntervalMs / 1000,
       targets: targets.map((t) => ({
         id: t.id,
         label: t.label,
@@ -759,6 +766,8 @@ browser.runtime.onMessage.addListener(function (message, sender, sendResponse) {
       message.setTargetInterval.id,
       message.setTargetInterval.seconds
     );
+  } else if (message && message.setDefaultInterval) {
+    setDefaultInterval(message.setDefaultInterval.seconds);
   } else if (message && message.pauseTarget) {
     setTargetPaused(message.pauseTarget.id, message.pauseTarget.paused);
   } else if (message && message.showTargetId !== undefined) {
