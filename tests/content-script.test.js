@@ -241,6 +241,19 @@ describe("clickster content script", () => {
       expect(slowClicks).toHaveBeenCalledTimes(1);
     });
 
+    it("defaults a new target to the last frequency the user set (#7)", () => {
+      hoverAndSelect(document.getElementById("target"));
+      browser.emit({
+        setTargetInterval: { id: state().targets[0].id, seconds: 5 },
+      });
+
+      // The next selection inherits 5s instead of the 1s default...
+      hoverAndSelect(document.getElementById("other"));
+      expect(state().targets[1].intervalSeconds).toBe(5);
+      // ...and the choice is persisted so it survives a reload.
+      expect(localStorage.getItem("clicksterDefaultIntervalMs")).toBe("5000");
+    });
+
     it("re-resolves a re-rendered target and keeps clicking the live node (#12)", () => {
       const original = document.getElementById("target");
       hoverAndSelect(original);

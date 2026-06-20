@@ -26,6 +26,12 @@ function setClicksterEnabled(enabled) {
   localStorage.setItem("clicksterEnabled", enabled ? "true" : "false");
 }
 
+// The rate to pre-fill for newly selected targets: the last one the user chose
+// (remembered across reloads), falling back to the 1s default (#7).
+let defaultIntervalMs =
+  Number(localStorage.getItem("clicksterDefaultIntervalMs")) ||
+  DEFAULT_INTERVAL_MS;
+
 // Each entry: { id, selector, label, ref, intervalMs, clickCount,
 //               lastClickedAt, paused, originalBorder, ... }
 let targets = [];
@@ -314,7 +320,7 @@ function addTarget(element, options) {
     selector: options.selector || cssPathFor(element),
     label: labelFor(element),
     ref: element,
-    intervalMs: options.intervalMs || DEFAULT_INTERVAL_MS,
+    intervalMs: options.intervalMs || defaultIntervalMs,
     clickCount: 0,
     lastClickedAt: Date.now(),
     paused: !!options.paused,
@@ -346,6 +352,9 @@ function setTargetInterval(id, seconds) {
   const value = Number(seconds);
   if (!isFinite(value) || value <= 0) return;
   target.intervalMs = value * 1000;
+  // Remember this rate as the default for the next target the user selects.
+  defaultIntervalMs = target.intervalMs;
+  localStorage.setItem("clicksterDefaultIntervalMs", String(defaultIntervalMs));
   persistTargets();
 }
 
