@@ -700,8 +700,12 @@ function restoreTargets() {
   }
 }
 
-browser.runtime.onMessage.addListener(function (message) {
-  if (message === "GET_STATE") {
+browser.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+  if (message === "PING") {
+    // Reachability probe (the background worker uses it to avoid injecting a
+    // second copy of this script into a tab that already has one).
+    if (sendResponse) sendResponse(true);
+  } else if (message === "GET_STATE") {
     sendState();
   } else if (message === "SELECT_ELEMENT_CLICKED") {
     enableSelectionMode();

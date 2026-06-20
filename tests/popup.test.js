@@ -145,6 +145,51 @@ describe("clickster popup", () => {
     ]);
   });
 
+  it("requests host access then hands off to the background worker (narrow build)", async () => {
+    document.body.innerHTML = readPopupHtml();
+    window.close = vi.fn();
+    const narrow = installBrowserMock({ activeTabId: TAB_ID, permissions: true });
+    narrow.runtime.sendMessage = vi.fn().mockResolvedValue(true); // worker acks
+    loadScript("popup/popup.js");
+    await flushMicrotasks();
+    narrow.tabs.sendMessage.mockClear();
+
+    document.getElementById("select-element-btn").click();
+    await flushMicrotasks();
+
+    expect(narrow.permissions.request).toHaveBeenCalledWith({
+      origins: ["*://*/*"],
+    });
+    expect(narrow.runtime.sendMessage).toHaveBeenCalledWith({
+      clicksterArm: true,
+    });
+    // Worker handled injection+arm, so the popup doesn't also poke the page.
+    expect(narrow.tabs.sendMessage).not.toHaveBeenCalledWith(
+      TAB_ID,
+      "SELECT_ELEMENT_CLICKED"
+    );
+    expect(window.close).toHaveBeenCalled();
+  });
+
+  it("arms the page directly when no background worker answers (broad build)", async () => {
+    document.body.innerHTML = readPopupHtml();
+    window.close = vi.fn();
+    const broad = installBrowserMock({ activeTabId: TAB_ID });
+    broad.runtime.sendMessage = vi.fn().mockRejectedValue(new Error("no worker"));
+    loadScript("popup/popup.js");
+    await flushMicrotasks();
+    broad.tabs.sendMessage.mockClear();
+
+    document.getElementById("select-element-btn").click();
+    await flushMicrotasks();
+
+    expect(broad.tabs.sendMessage).toHaveBeenCalledWith(
+      TAB_ID,
+      "SELECT_ELEMENT_CLICKED"
+    );
+    expect(window.close).toHaveBeenCalled();
+  });
+
   it("sends removeTargetId when a row's remove button is clicked", async () => {
     emitState({ enabled: true, targets: [makeTarget({ id: 9 })] });
     document.querySelector(".remove-btn").click();

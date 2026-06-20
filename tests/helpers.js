@@ -22,7 +22,7 @@ export function loadScript(relativePath) {
  * `emit(message)` delivers a runtime message to the most recently loaded
  * script, like a message arriving from the popup/content script.
  */
-export function installBrowserMock({ activeTabId = 7 } = {}) {
+export function installBrowserMock({ activeTabId = 7, permissions = false } = {}) {
   const messageListeners = [];
   const mock = {
     runtime: {
@@ -37,6 +37,14 @@ export function installBrowserMock({ activeTabId = 7 } = {}) {
     },
     emit: (message) => messageListeners.at(-1)(message),
   };
+  // Present only in the narrowed (store) builds; absent in the broad dev/E2E
+  // build, where the popup messages the auto-injected content script directly.
+  if (permissions) {
+    mock.permissions = {
+      request: vi.fn().mockResolvedValue(true),
+      contains: vi.fn().mockResolvedValue(true),
+    };
+  }
   globalThis.browser = mock;
   window.browser = mock;
   return mock;

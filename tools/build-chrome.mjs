@@ -1,12 +1,19 @@
 #!/usr/bin/env node
-// Build the Chrome (MV3) variant from the Firefox (MV2) manifest — the JS/HTML
-// are identical and cross-browser, so only the manifest differs. Produces:
-//   dist/chrome/             unpacked, WITH `key` (stable id for --load-extension E2E)
-//   dist/clickster-chrome.zip  store upload, WITHOUT `key` (the Web Store rejects it)
+// Build the Chrome (MV3) variants from the Firefox (MV2) manifest. Produces:
+//   dist/chrome/               unpacked, BROAD + key (stable id for E2E)
+//   dist/clickster-chrome.zip  store upload, NARROW + no key (activeTab +
+//                              optional host access; the Web Store rejects key)
 import { execSync } from "node:child_process";
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  DEV_FILES,
+  STORE_FILES,
+  chromeBroad,
+  chromeNarrow,
+  stageDir,
+} from "./store-manifest.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -18,35 +25,21 @@ const CHROME_KEY =
 
 const mv2 = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
 
-const baseMv3 = {
-  manifest_version: 3,
-  name: mv2.name,
-  version: mv2.version,
-  description: mv2.description,
-  icons: mv2.icons,
-  content_scripts: mv2.content_scripts,
-  // browser_action -> action; permissions -> host_permissions (MV3 split).
-  action: mv2.browser_action,
-  host_permissions: mv2.permissions,
-};
+// Unpacked BROAD build WITH key — loaded by the E2E for a deterministic id.
+stageDir(
+  root,
+  join(root, "dist", "chrome"),
+  { ...chromeBroad(mv2), key: CHROME_KEY },
+  DEV_FILES
+);
 
-function stage(dir, manifest) {
-  rmSync(dir, { recursive: true, force: true });
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
-  for (const item of ["clickster.js", "popup", "icons", "LICENSE"]) {
-    cpSync(join(root, item), join(dir, item), { recursive: true });
-  }
-}
-
-// Unpacked build WITH key — loaded by the E2E for a deterministic id.
-stage(join(root, "dist", "chrome"), { ...baseMv3, key: CHROME_KEY });
-
-// Store build WITHOUT key — what you upload to the Chrome Web Store.
+// Store NARROW build WITHOUT key — what you upload to the Chrome Web Store.
 const storeDir = join(root, "dist", "chrome-store");
-stage(storeDir, baseMv3);
-execSync(`cd '${storeDir}' && rm -f ../clickster-chrome.zip && zip -rq ../clickster-chrome.zip .`);
+stageDir(root, storeDir, chromeNarrow(mv2), STORE_FILES);
+execSync(
+  `cd '${storeDir}' && rm -f ../clickster-chrome.zip && zip -rq ../clickster-chrome.zip .`
+);
 
 console.log(
-  "built dist/chrome/ (with key, for tests) and dist/clickster-chrome.zip (no key, for the store)"
+  "built dist/chrome/ (broad, with key, for tests) and dist/clickster-chrome.zip (narrow, no key, for the store)"
 );
