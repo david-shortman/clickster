@@ -163,6 +163,26 @@ describe("clickster content script", () => {
       );
     });
 
+    it("disarms selection when another frame selects (#13)", () => {
+      const target = document.getElementById("target");
+      browser.emit("SELECT_ELEMENT_CLICKED");
+      const c = centerOf(target);
+      document.dispatchEvent(
+        new MouseEvent("mousemove", { clientX: c.x, clientY: c.y })
+      );
+      expect(target.style.border).toContain("red");
+
+      // A sibling frame completed the selection — this frame disarms.
+      browser.emit("STOP_SELECTION_MODE");
+      expect(target.style.border).not.toContain("red");
+
+      // A subsequent click must not select anything here.
+      document.dispatchEvent(
+        new MouseEvent("click", { clientX: c.x, clientY: c.y, bubbles: true })
+      );
+      expect(state().targets).toHaveLength(0);
+    });
+
     it("removes a target and restores its highlight", () => {
       const target = document.getElementById("target");
       hoverAndSelect(target);

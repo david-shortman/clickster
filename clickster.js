@@ -5,6 +5,26 @@ const browser = isChrome ? chrome : window["browser"];
 const TICK_MS = 200;
 const DEFAULT_INTERVAL_MS = 1000;
 
+// localStorage access throws in sandboxed iframes (course-ware SCORM players,
+// etc.), which would crash the whole content script on load now that it runs in
+// every frame (#13). Wrap it so those frames still function for the session,
+// just without persistence. Bracket access keeps the literal out of reach of
+// the global localStorage.* find/replace these helpers replaced.
+function lsGet(key) {
+  try {
+    return window["localStorage"].getItem(key);
+  } catch (e) {
+    return null;
+  }
+}
+function lsSet(key, value) {
+  try {
+    window["localStorage"].setItem(key, value);
+  } catch (e) {
+    // sandboxed/blocked storage — skip persistence in this frame
+  }
+}
+
 // The selected highlight is a box-shadow ring rather than a border so it hugs
 // the element's own border-radius (border-image ignores border-radius) and
 // adds no layout shift. Concentric rings keep the rainbow identity.
@@ -19,17 +39,17 @@ const PRESSED_SHADOW =
 
 // Persisted so clicking survives the navigations and reloads it often triggers
 // (a click on a "next" button reloads the page). Restored on load below.
-let clicksterEnabled = localStorage.getItem("clicksterEnabled") === "true";
+let clicksterEnabled = lsGet("clicksterEnabled") === "true";
 
 function setClicksterEnabled(enabled) {
   clicksterEnabled = enabled;
-  localStorage.setItem("clicksterEnabled", enabled ? "true" : "false");
+  lsSet("clicksterEnabled", enabled ? "true" : "false");
 }
 
 // The rate to pre-fill for newly selected targets: the last one the user chose
 // (remembered across reloads), falling back to the 1s default (#7).
 let defaultIntervalMs =
-  Number(localStorage.getItem("clicksterDefaultIntervalMs")) ||
+  Number(lsGet("clicksterDefaultIntervalMs")) ||
   DEFAULT_INTERVAL_MS;
 
 // Each entry: { id, selector, label, ref, intervalMs, clickCount,
@@ -43,10 +63,24 @@ let clientX, clientY;
 const elementsThatWereDisabledOnPageLoad =
   document.body.querySelectorAll("*:disabled");
 
-let idCounter = 0;
+// Seed per-frame so target ids don't collide across iframes (#13): the popup
+// keys rows by id and control messages broadcast to every frame in the tab, so
+// two frames each starting at 1 would clash.
+let idCounter = Math.floor(Math.random() * 1e9);
 function getNextId() {
   idCounter += 1;
   return idCounter;
+}
+
+// Fire-and-forget message to the extension (background/popup); ignore the
+// "no receiver" rejection that happens when neither is listening.
+function notifyExtension(message) {
+  try {
+    const result = browser.runtime.sendMessage(message);
+    if (result && result.catch) result.catch(() => {});
+  } catch (e) {
+    // no receiving end
+  }
 }
 
 function removeHoverHighlight(element) {
@@ -256,7 +290,7 @@ function labelFor(element) {
 }
 
 function persistTargets() {
-  localStorage.setItem(
+  lsSet(
     "clicksterTargets",
     JSON.stringify(
       targets.map((t) => ({
@@ -361,7 +395,7 @@ function setDefaultInterval(seconds) {
   const value = Number(seconds);
   if (!isFinite(value) || value <= 0) return;
   defaultIntervalMs = value * 1000;
-  localStorage.setItem("clicksterDefaultIntervalMs", String(defaultIntervalMs));
+  lsSet("clicksterDefaultIntervalMs", String(defaultIntervalMs));
 }
 
 function setTargetPaused(id, paused) {
@@ -561,14 +595,23 @@ function enableSelectionMode() {
   });
 }
 
-function setSelectedElement(event) {
-  if (!shouldNextClickSelectAnElement) return;
-  event.preventDefault();
-
+// Leave selection mode: restore disabled elements, clear the hover border, and
+// resume clicking. Shared by an actual selection and by a sibling-frame disarm.
+function disableSelectionMode() {
+  if (!isSelectionModeEnabled) return;
   elementsThatWereDisabledOnPageLoad.forEach((elem) => {
     elem.disabled = true;
   });
   removeHoverHighlight(lastHoveredElement);
+  lastHoveredElement = null;
+  isSelectionModeEnabled = false;
+  shouldNextClickSelectAnElement = false;
+  startClicking();
+}
+
+function setSelectedElement(event) {
+  if (!shouldNextClickSelectAnElement) return;
+  event.preventDefault();
 
   // Additive: each selection adds a target to the list (removed individually
   // from the popup), rather than replacing the previous one. The point the user
@@ -578,9 +621,11 @@ function setSelectedElement(event) {
   });
   persistTargets();
 
-  isSelectionModeEnabled = false;
-  shouldNextClickSelectAnElement = false;
-  startClicking();
+  disableSelectionMode();
+  // The popup armed every frame in the tab; now that this one has the target,
+  // tell the worker to disarm the others so a later click elsewhere doesn't
+  // start an unintended selection (#13).
+  notifyExtension({ clicksterDisarmOthers: true });
 }
 
 document.addEventListener("keyup", (event) => {
@@ -625,7 +670,7 @@ function dismissResumeToast() {
 // so it's never a mystery why a page is clicking itself. Stays until the user
 // acts (it is not auto-dismissed).
 function showResumeToast() {
-  if (localStorage.getItem("clicksterHideResumeToast") === "true") return;
+  if (lsGet("clicksterHideResumeToast") === "true") return;
   if (!document.body || document.getElementById("clickster-resume-toast")) {
     return;
   }
@@ -672,7 +717,7 @@ function showResumeToast() {
     "color:#9189c0;font-size:12px;margin-left:auto;text-decoration:underline;cursor:pointer";
   hideLink.addEventListener("click", (event) => {
     event.preventDefault();
-    localStorage.setItem("clicksterHideResumeToast", "true");
+    lsSet("clicksterHideResumeToast", "true");
     dismissResumeToast();
   });
 
@@ -688,7 +733,7 @@ function showResumeToast() {
 // if it was running. This is what makes clicking survive a reload (issue #11).
 function restoreTargets() {
   let stored = [];
-  const raw = localStorage.getItem("clicksterTargets");
+  const raw = lsGet("clicksterTargets");
   if (raw) {
     try {
       stored = JSON.parse(raw);
@@ -717,7 +762,7 @@ function restoreTargets() {
   });
   // Fall back to the older query-only state so existing users keep their target.
   if (targets.length === 0) {
-    const cachedQuery = localStorage.getItem("clicksterQuery");
+    const cachedQuery = lsGet("clicksterQuery");
     if (cachedQuery) {
       cachedQuery.split("\n").forEach((selector) => {
         try {
@@ -747,6 +792,9 @@ browser.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     sendState();
   } else if (message === "SELECT_ELEMENT_CLICKED") {
     enableSelectionMode();
+  } else if (message === "STOP_SELECTION_MODE") {
+    // Another frame in this tab completed the selection — disarm this one.
+    disableSelectionMode();
   } else if (message === "START_CLICKING") {
     setClicksterEnabled(true);
     const now = Date.now();

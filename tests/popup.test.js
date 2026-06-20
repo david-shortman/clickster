@@ -214,6 +214,39 @@ describe("clickster popup", () => {
     expect(document.getElementById("default-interval").value).toBe("6");
   });
 
+  it("merges target states reported by multiple frames (#13)", () => {
+    // Top frame: one target, not running.
+    browser.emit(
+      {
+        clicksterState: {
+          enabled: false,
+          defaultIntervalSeconds: 1,
+          targets: [makeTarget({ id: 100, label: "Top" })],
+        },
+      },
+      { frameId: 0 }
+    );
+    // An iframe: another target, and it's running.
+    browser.emit(
+      {
+        clicksterState: {
+          enabled: true,
+          defaultIntervalSeconds: 1,
+          targets: [makeTarget({ id: 200, label: "In frame" })],
+        },
+      },
+      { frameId: 1 }
+    );
+
+    const rows = document.getElementById("targets-list").children;
+    expect(rows).toHaveLength(2);
+    const labels = [...rows].map((r) => r.querySelector(".target-label").textContent);
+    expect(labels).toEqual(["Top", "In frame"]);
+    // Running in any frame => the popup shows running and the Stop button.
+    expect(hidden("running-badge")).toBe(false);
+    expect(hidden("stop-btn")).toBe(false);
+  });
+
   it("sends removeTargetId when a row's remove button is clicked", async () => {
     emitState({ enabled: true, targets: [makeTarget({ id: 9 })] });
     document.querySelector(".remove-btn").click();

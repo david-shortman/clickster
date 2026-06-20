@@ -229,9 +229,36 @@ function renderState(state) {
   });
 }
 
-browser.runtime.onMessage.addListener(function (message) {
+// With content scripts in every frame (#13), each frame reports its own state.
+// Collect them by frame and render the union so iframe targets show and are
+// controllable. Frames that stop reporting (navigated away) expire.
+const frameStates = new Map();
+const FRAME_STALE_MS = 1500;
+
+function renderMerged() {
+  const now = Date.now();
+  const fresh = [...frameStates.entries()]
+    .filter(([, v]) => now - v.ts < FRAME_STALE_MS)
+    .sort((a, b) => a[0] - b[0]); // top frame (0) first
+  const merged = { enabled: false, defaultIntervalSeconds: null, targets: [] };
+  for (const [, v] of fresh) {
+    if (v.state.enabled) merged.enabled = true;
+    if (
+      merged.defaultIntervalSeconds == null &&
+      v.state.defaultIntervalSeconds != null
+    ) {
+      merged.defaultIntervalSeconds = v.state.defaultIntervalSeconds;
+    }
+    if (v.state.targets) merged.targets.push(...v.state.targets);
+  }
+  renderState(merged);
+}
+
+browser.runtime.onMessage.addListener(function (message, sender) {
   if (message && message.clicksterState) {
-    renderState(message.clicksterState);
+    const frameId = sender && sender.frameId != null ? sender.frameId : 0;
+    frameStates.set(frameId, { state: message.clicksterState, ts: Date.now() });
+    renderMerged();
   }
 });
 

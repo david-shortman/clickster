@@ -56,6 +56,7 @@ async function ensureRegistered() {
           matches: CS_MATCHES,
           js: [CS_FILE],
           runAt: "document_idle",
+          allFrames: true,
           persistAcrossSessions: true,
         },
       ]);
@@ -69,6 +70,7 @@ async function ensureRegistered() {
         matches: CS_MATCHES,
         js: [{ file: CS_FILE }],
         runAt: "document_idle",
+        allFrames: true,
       });
     } catch (e) {
       firefoxRegistration = null;
@@ -116,9 +118,12 @@ async function ensureInjected(tabId) {
   if (await ping(tabId)) return;
   try {
     if (hasScripting) {
-      await api.scripting.executeScript({ target: { tabId }, files: [CS_FILE] });
+      await api.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        files: [CS_FILE],
+      });
     } else {
-      await api.tabs.executeScript(tabId, { file: CS_FILE });
+      await api.tabs.executeScript(tabId, { file: CS_FILE, allFrames: true });
     }
   } catch (e) {
     // Restricted page (store, about:, etc.) — nothing we can do.
@@ -156,6 +161,11 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
       () => sendResponse(false)
     );
     return true; // keep the channel open for the async response
+  }
+  // A frame made a selection — disarm every other frame in its tab so a later
+  // click elsewhere doesn't start an unintended selection (#13).
+  if (message && message.clicksterDisarmOthers && sender && sender.tab) {
+    api.tabs.sendMessage(sender.tab.id, "STOP_SELECTION_MODE");
   }
 });
 

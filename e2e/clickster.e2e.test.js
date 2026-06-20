@@ -482,4 +482,66 @@ describe(`clickster in ${BROWSER}`, () => {
       "drag did not move the click point"
     );
   }, 90000);
+
+  // Runs last: selecting inside the iframe leaves the top frame armed (the broad
+  // dev build has no worker to disarm it), which the next test's navigation
+  // clears.
+  it("selects and auto-clicks a target inside an iframe (#13)", async () => {
+    await driver.switchTo().window(pageHandle);
+    try {
+      await driver.executeScript("localStorage.clear();");
+    } catch (e) {
+      // no page with localStorage yet
+    }
+    // Host page embeds counter.html in a same-origin iframe.
+    await navigateTo(driver, fixtureUrl("iframe-host.html"), By.id("frame"));
+
+    // waitForContentScript needs the WebExtension API, so run it from the popup.
+    await openPopup();
+    if (tabId === undefined) {
+      tabId = await findTabIdByUrl(driver, "iframe-host.html");
+    }
+    await waitForContentScript(driver, tabId); // top frame reachable
+    await closePopup();
+
+    // Arm selection — the popup broadcasts to every frame in the tab; it closes
+    // itself after arming.
+    await openPopup();
+    await (await armSelectionButton()).click();
+
+    // Pick #one from INSIDE the iframe. Retry the pointer click until the ring
+    // appears: the frame's content script may inject slightly after load, and
+    // point-dedup means repeat clicks don't add duplicate targets.
+    await driver.switchTo().window(pageHandle);
+    await driver.switchTo().frame(await driver.findElement(By.id("frame")));
+    const one = await driver.wait(until.elementLocated(By.id("one")), 5000);
+    await driver.wait(
+      async () => {
+        await driver.actions().move({ x: 5, y: 5 }).perform();
+        await driver.actions().move({ origin: one }).perform();
+        await driver.actions().click().perform();
+        const style = await driver
+          .findElement(By.id("one"))
+          .getAttribute("style");
+        return style.includes("rgb(184, 39, 252)");
+      },
+      8000,
+      "iframe target was not selected"
+    );
+    await driver.switchTo().defaultContent();
+
+    // Start, then confirm the in-frame counter advances.
+    await openPopup();
+    await clickPopupButton("start-btn");
+    await closePopup();
+
+    await driver.switchTo().window(pageHandle);
+    await driver.switchTo().frame(await driver.findElement(By.id("frame")));
+    await driver.wait(
+      async () => Number(await driver.findElement(By.id("count-one")).getText()) >= 2,
+      8000,
+      "clicking did not reach the iframe target"
+    );
+    await driver.switchTo().defaultContent();
+  }, 90000);
 });

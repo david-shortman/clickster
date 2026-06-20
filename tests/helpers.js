@@ -35,7 +35,7 @@ export function installBrowserMock({ activeTabId = 7, permissions = false } = {}
       query: vi.fn().mockResolvedValue([{ id: activeTabId }]),
       sendMessage: vi.fn(),
     },
-    emit: (message) => messageListeners.at(-1)(message),
+    emit: (message, sender) => messageListeners.at(-1)(message, sender),
   };
   // Present only in the narrowed (store) builds; absent in the broad dev/E2E
   // build, where the popup messages the auto-injected content script directly.

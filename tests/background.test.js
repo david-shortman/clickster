@@ -67,7 +67,7 @@ describe("clickster background worker (Chrome MV3)", () => {
       { id: "clickster", matches: ["*://*/*"], js: ["clickster.js"] }
     );
     expect(chrome.scripting.executeScript).toHaveBeenCalledWith({
-      target: { tabId: TAB },
+      target: { tabId: TAB, allFrames: true },
       files: ["clickster.js"],
     });
     expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
@@ -115,7 +115,7 @@ describe("clickster background worker (Chrome MV3)", () => {
 
     expect(chrome.tabs.query).not.toHaveBeenCalled(); // didn't fall back to active tab
     expect(chrome.scripting.executeScript).toHaveBeenCalledWith({
-      target: { tabId: 5 },
+      target: { tabId: 5, allFrames: true },
       files: ["clickster.js"],
     });
     expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
