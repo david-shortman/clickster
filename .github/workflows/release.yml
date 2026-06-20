@@ -1,8 +1,9 @@
 name: Release
 
-# Cuts a GitHub Release with the packaged extension zip whenever the
-# manifest version changes on main (or on demand). The same zip can be
-# uploaded to AMO.
+# Cuts a GitHub Release with the narrowed store zips (Firefox AMO +
+# Chrome Web Store) whenever the manifest version changes on main (or on
+# demand). These are the activeTab + optional-host builds you upload to
+# the stores — NOT the broad dev/E2E zip from `npm run build`.
 on:
   push:
     branches: [main]
@@ -36,14 +37,16 @@ jobs:
 
       - if: steps.exists.outputs.found == 'false'
         run: |
-          npm run build
-          mv dist/clickster.zip "clickster-${{ steps.meta.outputs.version }}.zip"
+          npm run build:stores
+          mv dist/clickster-firefox.zip "clickster-firefox-${{ steps.meta.outputs.version }}.zip"
+          mv dist/clickster-chrome.zip "clickster-chrome-${{ steps.meta.outputs.version }}.zip"
 
       - if: steps.exists.outputs.found == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "v${{ steps.meta.outputs.version }}" \
-            "clickster-${{ steps.meta.outputs.version }}.zip" \
+            "clickster-firefox-${{ steps.meta.outputs.version }}.zip" \
+            "clickster-chrome-${{ steps.meta.outputs.version }}.zip" \
             --title "Clickster v${{ steps.meta.outputs.version }}" \
             --generate-notes
