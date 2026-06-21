@@ -17,6 +17,9 @@ import { join } from "node:path";
 export const DEV_FILES = ["clickster.js", "popup", "icons", "LICENSE"];
 export const STORE_FILES = [...DEV_FILES, "background.js"];
 
+// A match pattern (host permission) vs an API permission like "storage".
+const isHostPermission = (p) => p.includes("://") || p === "<all_urls>";
+
 // Chrome MV3, broad (unpacked E2E build only).
 export function chromeBroad(mv2) {
   return {
@@ -26,9 +29,11 @@ export function chromeBroad(mv2) {
     description: mv2.description,
     icons: mv2.icons,
     content_scripts: mv2.content_scripts,
-    // browser_action -> action; permissions -> host_permissions (MV3 split).
+    // browser_action -> action; MV2 `permissions` split into API permissions
+    // and host_permissions.
     action: mv2.browser_action,
-    host_permissions: mv2.permissions,
+    permissions: mv2.permissions.filter((p) => !isHostPermission(p)),
+    host_permissions: mv2.permissions.filter(isHostPermission),
   };
 }
 
@@ -41,7 +46,7 @@ export function chromeNarrow(mv2) {
     description: mv2.description,
     icons: mv2.icons,
     action: mv2.browser_action,
-    permissions: ["activeTab", "scripting"],
+    permissions: ["activeTab", "scripting", "storage"],
     optional_host_permissions: ["*://*/*"],
     background: { service_worker: "background.js" },
   };
@@ -53,7 +58,7 @@ export function chromeNarrow(mv2) {
 export function firefoxNarrow(mv2) {
   const manifest = {
     ...mv2,
-    permissions: ["activeTab"],
+    permissions: ["activeTab", "storage"],
     optional_permissions: ["*://*/*"],
     background: { scripts: ["background.js"], persistent: true },
     browser_specific_settings: {

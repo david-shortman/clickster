@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { installBrowserMock, loadScript } from "./helpers.js";
+import { flushMicrotasks, installBrowserMock, loadScript } from "./helpers.js";
 
 // Sandboxed iframes (SCORM course players, etc.) block storage: touching
 // localStorage throws. Now that the content script runs in every frame (#13),
@@ -27,8 +27,9 @@ describe("clickster content script with storage blocked (#13)", () => {
     expect(() => loadScript("clickster.js")).not.toThrow();
   });
 
-  it("still answers GET_STATE (the frame is functional)", () => {
+  it("still answers GET_STATE (the frame is functional)", async () => {
     loadScript("clickster.js");
+    await flushMicrotasks();
     browser.emit("GET_STATE");
     const call = browser.runtime.sendMessage.mock.calls.find(
       (c) => c[0] && c[0].clicksterState

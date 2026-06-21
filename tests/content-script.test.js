@@ -1,8 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { installBrowserMock, loadScript } from "./helpers.js";
+import { flushMicrotasks, installBrowserMock, loadScript } from "./helpers.js";
 
 // DEFAULT_INTERVAL_MS in the content script.
 const INTERVAL_MS = 1000;
+// The content script keys this origin's state under "site:<origin>" (#14).
+const SITE_KEY = "site:" + location.origin;
+
+// Load the content script and wait for its async init() (storage.local read) to
+// settle, so module state is hydrated before the test runs.
+async function loadAndInit() {
+  loadScript("clickster.js");
+  await flushMicrotasks();
+}
 
 // jsdom has no layout, so give elements fake rects and a hit-testing
 // elementFromPoint — coordinate clicking is geometry, so the harness must model
@@ -28,7 +37,7 @@ function centerOf(el) {
 describe("clickster content script", () => {
   let browser;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
     localStorage.clear();
     document.body.innerHTML = `
@@ -43,7 +52,7 @@ describe("clickster content script", () => {
     // jsdom doesn't implement scrollIntoView.
     Element.prototype.scrollIntoView = () => {};
     browser = installBrowserMock();
-    loadScript("clickster.js");
+    await loadAndInit();
   });
 
   afterEach(() => {
@@ -122,7 +131,7 @@ describe("clickster content script", () => {
         new MouseEvent("click", { clientX: c.x, clientY: c.y, bubbles: true })
       );
 
-      const stored = JSON.parse(localStorage.getItem("clicksterTargets"));
+      const stored = browser.__store[SITE_KEY].targets;
       expect(stored[0].selector).toContain(":nth-of-type(2)");
       // The generated selector must resolve uniquely back to the same element.
       expect(document.querySelectorAll(stored[0].selector)).toHaveLength(1);
@@ -266,8 +275,8 @@ describe("clickster content script", () => {
 
       hoverAndSelect(document.getElementById("target"));
       expect(state().targets[0].intervalSeconds).toBe(5);
-      // Persisted so it survives a reload, and reported back in state.
-      expect(localStorage.getItem("clicksterDefaultIntervalMs")).toBe("5000");
+      // Persisted globally (so it follows the user), and reported back in state.
+      expect(browser.__store.defaultIntervalMs).toBe(5000);
       expect(state().defaultIntervalSeconds).toBe(5);
     });
 
@@ -429,7 +438,7 @@ describe("clickster content script", () => {
       );
       document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
 
-      const stored = JSON.parse(localStorage.getItem("clicksterTargets"));
+      const stored = browser.__store[SITE_KEY].targets;
       expect(stored[0].offsetX).toBeCloseTo(0.2);
       expect(stored[0].offsetY).toBeCloseTo(0.25);
       expect(canvas).toBeTruthy();
@@ -458,60 +467,60 @@ describe("clickster content script", () => {
   });
 
   describe("persistence across reload (#11)", () => {
-    // A fresh script run against the same DOM + localStorage is what a real
-    // page reload looks like. Clear timers first, since navigating away tears
-    // down the old page's intervals.
-    function reload() {
+    // A fresh script run against the same DOM is what a real reload looks like.
+    // storage.local persists across it (carry the store, like real extension
+    // storage), and the script's async init() must settle before we assert.
+    async function reload() {
       vi.clearAllTimers();
-      browser = installBrowserMock();
-      loadScript("clickster.js");
+      browser = installBrowserMock({ store: browser.__store });
+      await loadAndInit();
     }
 
-    it("resumes clicking after reload when it was running", () => {
+    it("resumes clicking after reload when it was running", async () => {
       const target = document.getElementById("target");
       hoverAndSelect(target);
       browser.emit("START_CLICKING");
 
-      reload();
+      await reload();
 
       const clicks = countClicks(target);
       vi.advanceTimersByTime(INTERVAL_MS * 2);
       expect(clicks).toHaveBeenCalledTimes(2);
     });
 
-    it("stays stopped after reload when it was not running", () => {
+    it("stays stopped after reload when it was not running", async () => {
       const target = document.getElementById("target");
       hoverAndSelect(target);
       browser.emit("START_CLICKING");
       browser.emit("STOP_CLICKING");
 
-      reload();
+      await reload();
 
       const clicks = countClicks(target);
       vi.advanceTimersByTime(INTERVAL_MS * 2);
       expect(clicks).not.toHaveBeenCalled();
     });
 
-    it("restores targets (with their interval) after reload", () => {
+    it("restores targets (with their interval) after reload", async () => {
       hoverAndSelect(document.getElementById("target"));
       browser.emit({
         setTargetInterval: { id: state().targets[0].id, seconds: 4 },
       });
 
-      reload();
+      await reload();
 
       const s = state();
       expect(s.targets).toHaveLength(1);
       expect(s.targets[0].intervalSeconds).toBe(4);
     });
 
-    it("does not resume after the last target is removed and reloaded", () => {
+    it("does not resume after the last target is removed and reloaded", async () => {
       const target = document.getElementById("target");
       hoverAndSelect(target);
       browser.emit("START_CLICKING");
       browser.emit({ removeTargetId: state().targets[0].id });
 
-      reload();
+      await reload();
 
       const clicks = countClicks(target);
       vi.advanceTimersByTime(INTERVAL_MS * 2);
@@ -520,37 +529,37 @@ describe("clickster content script", () => {
   });
 
   describe("resume toast", () => {
-    function reload() {
+    async function reload() {
       vi.clearAllTimers();
-      browser = installBrowserMock();
-      loadScript("clickster.js");
+      browser = installBrowserMock({ store: browser.__store });
+      await loadAndInit();
     }
     const toast = () => document.getElementById("clickster-resume-toast");
 
-    it("shows a sticky toast when clicking resumes after reload", () => {
+    it("shows a sticky toast when clicking resumes after reload", async () => {
       hoverAndSelect(document.getElementById("target"));
       browser.emit("START_CLICKING");
       expect(toast()).toBeNull();
 
-      reload();
+      await reload();
       expect(toast()).not.toBeNull();
       expect(toast().textContent).toContain("still auto-clicking");
     });
 
-    it("does not show a toast when clicking did not resume", () => {
+    it("does not show a toast when clicking did not resume", async () => {
       hoverAndSelect(document.getElementById("target"));
       browser.emit("START_CLICKING");
       browser.emit("STOP_CLICKING");
 
-      reload();
+      await reload();
       expect(toast()).toBeNull();
     });
 
-    it("its Stop button halts clicking and removes the toast", () => {
+    it("its Stop button halts clicking and removes the toast", async () => {
       const target = document.getElementById("target");
       hoverAndSelect(target);
       browser.emit("START_CLICKING");
-      reload();
+      await reload();
 
       document.getElementById("clickster-resume-toast-stop").click();
       expect(toast()).toBeNull();
@@ -558,22 +567,22 @@ describe("clickster content script", () => {
       const clicks = countClicks(target);
       vi.advanceTimersByTime(INTERVAL_MS * 2);
       expect(clicks).not.toHaveBeenCalled();
-      reload();
+      await reload();
       expect(toast()).toBeNull();
     });
 
-    it("suppresses the toast permanently after 'Don't show again'", () => {
+    it("suppresses the toast permanently after 'Don't show again'", async () => {
       hoverAndSelect(document.getElementById("target"));
       browser.emit("START_CLICKING");
-      reload();
+      await reload();
 
       const link = [...toast().querySelectorAll("a")].find((a) =>
         a.textContent.includes("Don't show again")
       );
       link.click();
-      expect(localStorage.getItem("clicksterHideResumeToast")).toBe("true");
+      expect(browser.__store[SITE_KEY].hideResumeToast).toBe(true);
 
-      reload();
+      await reload();
       expect(toast()).toBeNull();
     });
   });

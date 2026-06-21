@@ -26,5 +26,5 @@
     "default_title": "Clickster",
     "default_popup": "popup/popup.html"
   },
-  "permissions": ["<all_urls>"]
+  "permissions": ["<all_urls>", "storage"]
 }

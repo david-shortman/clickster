@@ -25,6 +25,37 @@ function lsSet(key, value) {
   }
 }
 
+// Settings live in browser.storage.local (#14): the default rate is global so
+// it follows the user across sites, per-site state is keyed by origin, and —
+// unlike page localStorage — it works in storage-blocked/sandboxed frames and
+// never touches the host page's storage. localStorage is read only once, to
+// migrate legacy data.
+const DEFAULT_KEY = "defaultIntervalMs";
+const SITE_KEY = "site:" + location.origin;
+
+function storageGet(keys) {
+  try {
+    if (isChrome) {
+      return new Promise((resolve) =>
+        browser.storage.local.get(keys, (result) => resolve(result || {}))
+      );
+    }
+    return browser.storage.local.get(keys).catch(() => ({}));
+  } catch (e) {
+    return Promise.resolve({});
+  }
+}
+function storageSet(object) {
+  try {
+    if (isChrome) {
+      return new Promise((resolve) => browser.storage.local.set(object, resolve));
+    }
+    return browser.storage.local.set(object).catch(() => {});
+  } catch (e) {
+    return Promise.resolve();
+  }
+}
+
 // The selected highlight is a box-shadow ring rather than a border so it hugs
 // the element's own border-radius (border-image ignores border-radius) and
 // adds no layout shift. Concentric rings keep the rainbow identity.
@@ -38,19 +69,19 @@ const PRESSED_SHADOW =
   "0 0 0 6px #fec837, 0 0 0 8px #fd1892";
 
 // Persisted so clicking survives the navigations and reloads it often triggers
-// (a click on a "next" button reloads the page). Restored on load below.
-let clicksterEnabled = lsGet("clicksterEnabled") === "true";
+// (a click on a "next" button reloads the page). Hydrated from storage in
+// init() below.
+let clicksterEnabled = false;
+let hideResumeToast = false;
 
 function setClicksterEnabled(enabled) {
   clicksterEnabled = enabled;
-  lsSet("clicksterEnabled", enabled ? "true" : "false");
+  persistSite();
 }
 
-// The rate to pre-fill for newly selected targets: the last one the user chose
-// (remembered across reloads), falling back to the 1s default (#7).
-let defaultIntervalMs =
-  Number(lsGet("clicksterDefaultIntervalMs")) ||
-  DEFAULT_INTERVAL_MS;
+// The rate to pre-fill for newly selected targets (#7): a global setting, so it
+// follows the user to new tabs and sites. Hydrated in init().
+let defaultIntervalMs = DEFAULT_INTERVAL_MS;
 
 // Each entry: { id, selector, label, ref, intervalMs, clickCount,
 //               lastClickedAt, paused, originalBorder, ... }
@@ -289,19 +320,26 @@ function labelFor(element) {
   return element.tagName ? element.tagName.toLowerCase() : "element";
 }
 
+// Write this origin's state (enabled flag, targets, toast preference) under its
+// per-origin key. Named persistTargets for its many callers; it saves the whole
+// site record.
 function persistTargets() {
-  lsSet(
-    "clicksterTargets",
-    JSON.stringify(
-      targets.map((t) => ({
+  persistSite();
+}
+function persistSite() {
+  storageSet({
+    [SITE_KEY]: {
+      enabled: clicksterEnabled,
+      hideResumeToast: hideResumeToast,
+      targets: targets.map((t) => ({
         selector: t.selector,
         intervalMs: t.intervalMs,
         paused: t.paused,
         offsetX: t.offsetX,
         offsetY: t.offsetY,
-      }))
-    )
-  );
+      })),
+    },
+  });
 }
 
 function clamp01(value) {
@@ -395,7 +433,7 @@ function setDefaultInterval(seconds) {
   const value = Number(seconds);
   if (!isFinite(value) || value <= 0) return;
   defaultIntervalMs = value * 1000;
-  lsSet("clicksterDefaultIntervalMs", String(defaultIntervalMs));
+  storageSet({ [DEFAULT_KEY]: defaultIntervalMs });
 }
 
 function setTargetPaused(id, paused) {
@@ -670,7 +708,7 @@ function dismissResumeToast() {
 // so it's never a mystery why a page is clicking itself. Stays until the user
 // acts (it is not auto-dismissed).
 function showResumeToast() {
-  if (lsGet("clicksterHideResumeToast") === "true") return;
+  if (hideResumeToast) return;
   if (!document.body || document.getElementById("clickster-resume-toast")) {
     return;
   }
@@ -717,7 +755,8 @@ function showResumeToast() {
     "color:#9189c0;font-size:12px;margin-left:auto;text-decoration:underline;cursor:pointer";
   hideLink.addEventListener("click", (event) => {
     event.preventDefault();
-    lsSet("clicksterHideResumeToast", "true");
+    hideResumeToast = true;
+    persistSite();
     dismissResumeToast();
   });
 
@@ -729,26 +768,17 @@ function showResumeToast() {
   document.body.appendChild(toast);
 }
 
-// Re-resolve persisted target selectors after a page load and resume clicking
-// if it was running. This is what makes clicking survive a reload (issue #11).
-function restoreTargets() {
-  let stored = [];
-  const raw = lsGet("clicksterTargets");
-  if (raw) {
-    try {
-      stored = JSON.parse(raw);
-    } catch (e) {
-      stored = [];
-    }
-  }
-  stored.forEach((entry) => {
+// Re-resolve persisted target selectors against this page and add them back.
+// This is what makes clicking survive a reload (issue #11).
+function restoreTargetsFrom(stored) {
+  (stored || []).forEach((entry) => {
     // Tolerate the older format, which stored bare selector strings.
     const selector = typeof entry === "string" ? entry : entry.selector;
     if (!selector) return;
     const intervalMs =
       typeof entry === "object" && entry.intervalMs
         ? entry.intervalMs
-        : DEFAULT_INTERVAL_MS;
+        : defaultIntervalMs;
     const paused = typeof entry === "object" ? !!entry.paused : false;
     const offsetX = typeof entry === "object" ? entry.offsetX : undefined;
     const offsetY = typeof entry === "object" ? entry.offsetY : undefined;
@@ -760,21 +790,56 @@ function restoreTargets() {
       // Ignore selectors that no longer parse or match on this page.
     }
   });
-  // Fall back to the older query-only state so existing users keep their target.
-  if (targets.length === 0) {
-    const cachedQuery = lsGet("clicksterQuery");
-    if (cachedQuery) {
-      cachedQuery.split("\n").forEach((selector) => {
-        try {
-          document.body.querySelectorAll(selector).forEach((element) => {
-            addTarget(element, { selector });
-          });
-        } catch (e) {
-          // ignore
-        }
-      });
+}
+
+// Read legacy page-localStorage state (pre-#14 installs), to migrate once.
+function legacySiteState() {
+  let legacyTargets = [];
+  const raw = lsGet("clicksterTargets");
+  if (raw) {
+    try {
+      legacyTargets = JSON.parse(raw);
+    } catch (e) {
+      legacyTargets = [];
     }
   }
+  if (legacyTargets.length === 0) {
+    const cachedQuery = lsGet("clicksterQuery");
+    if (cachedQuery) {
+      legacyTargets = cachedQuery.split("\n").filter(Boolean);
+    }
+  }
+  return {
+    enabled: lsGet("clicksterEnabled") === "true",
+    hideResumeToast: lsGet("clicksterHideResumeToast") === "true",
+    targets: legacyTargets,
+  };
+}
+
+// Hydrate settings from storage.local (migrating legacy localStorage on first
+// run), restore this page's targets, and resume clicking if it was running.
+async function init() {
+  const data = await storageGet([DEFAULT_KEY, SITE_KEY]);
+
+  defaultIntervalMs =
+    Number(data[DEFAULT_KEY]) ||
+    Number(lsGet("clicksterDefaultIntervalMs")) ||
+    DEFAULT_INTERVAL_MS;
+
+  let site = data[SITE_KEY];
+  const migrated = !site;
+  if (migrated) {
+    site = legacySiteState();
+  }
+
+  clicksterEnabled = !!site.enabled;
+  hideResumeToast = !!site.hideResumeToast;
+  restoreTargetsFrom(site.targets);
+
+  // Persist the global default and, on first run, the migrated site record.
+  storageSet({ [DEFAULT_KEY]: defaultIntervalMs });
+  if (migrated) persistSite();
+
   if (targets.length > 0) {
     startClicking();
     if (clicksterEnabled) {
@@ -823,4 +888,4 @@ browser.runtime.onMessage.addListener(function (message, sender, sendResponse) {
   }
 });
 
-restoreTargets();
+init();

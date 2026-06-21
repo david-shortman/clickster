@@ -28,17 +28,31 @@ async function closePopup() {
   await driver.switchTo().window(pageHandle);
 }
 
-async function loadFixturePage() {
+/**
+ * Wipe persisted state so each test starts clean. Settings now live in
+ * browser.storage.local (#14), which survives reloads — and survives into the
+ * next test if not cleared — so clear it from an extension page. Also clear the
+ * page's localStorage for older builds / leftovers.
+ */
+async function clearPersistedState() {
+  await driver.switchTo().newWindow("tab");
+  await navigateTo(driver, popupUrl(), By.id("select-element-btn"));
+  await driver.executeAsyncScript(
+    `const done = arguments[arguments.length - 1];
+     const api = window.browser || window.chrome;
+     Promise.resolve(api.storage.local.clear()).then(() => done(), () => done());`
+  );
+  await driver.close();
   await driver.switchTo().window(pageHandle);
-  // Drop any persisted state from a previous test so each starts clean. (#11
-  // makes the enabled flag and targets survive reloads — including into the
-  // next test if not cleared.) The try/catch covers the first run on
-  // about:blank, where localStorage isn't reachable.
   try {
     await driver.executeScript("localStorage.clear();");
   } catch (e) {
     // no page with localStorage yet
   }
+}
+
+async function loadFixturePage() {
+  await clearPersistedState();
   await navigateTo(driver, fixtureUrl("counter.html"), By.id("one"));
   await openPopup();
   if (tabId === undefined) {
@@ -487,12 +501,7 @@ describe(`clickster in ${BROWSER}`, () => {
   // dev build has no worker to disarm it), which the next test's navigation
   // clears.
   it("selects and auto-clicks a target inside an iframe (#13)", async () => {
-    await driver.switchTo().window(pageHandle);
-    try {
-      await driver.executeScript("localStorage.clear();");
-    } catch (e) {
-      // no page with localStorage yet
-    }
+    await clearPersistedState();
     // Host page embeds counter.html in a same-origin iframe.
     await navigateTo(driver, fixtureUrl("iframe-host.html"), By.id("frame"));
 

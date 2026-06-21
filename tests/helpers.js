@@ -22,7 +22,11 @@ export function loadScript(relativePath) {
  * `emit(message)` delivers a runtime message to the most recently loaded
  * script, like a message arriving from the popup/content script.
  */
-export function installBrowserMock({ activeTabId = 7, permissions = false } = {}) {
+export function installBrowserMock({
+  activeTabId = 7,
+  permissions = false,
+  store = {},
+} = {}) {
   const messageListeners = [];
   const mock = {
     runtime: {
@@ -37,6 +41,35 @@ export function installBrowserMock({ activeTabId = 7, permissions = false } = {}
     },
     emit: (message, sender) => messageListeners.at(-1)(message, sender),
   };
+  // In-memory browser.storage.local (the content script's settings store, #14).
+  // Supports both the promise (Firefox) and callback (Chrome) call styles. The
+  // store can be carried across a simulated reload, like real extension storage.
+  mock.storage = {
+    local: {
+      get: vi.fn((keys, cb) => {
+        const wanted =
+          keys == null
+            ? Object.keys(store)
+            : Array.isArray(keys)
+            ? keys
+            : typeof keys === "string"
+            ? [keys]
+            : Object.keys(keys);
+        const result = {};
+        wanted.forEach((k) => {
+          if (k in store) result[k] = store[k];
+        });
+        if (typeof cb === "function") return void cb(result);
+        return Promise.resolve(result);
+      }),
+      set: vi.fn((object, cb) => {
+        Object.assign(store, object);
+        if (typeof cb === "function") return void cb();
+        return Promise.resolve();
+      }),
+    },
+  };
+  mock.__store = store;
   // Present only in the narrowed (store) builds; absent in the broad dev/E2E
   // build, where the popup messages the auto-injected content script directly.
   if (permissions) {
