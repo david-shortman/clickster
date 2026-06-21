@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   flushMicrotasks,
   installBrowserMock,
@@ -27,12 +27,21 @@ describe("clickster popup", () => {
   let browser;
 
   beforeEach(async () => {
+    // Fake timers so popup.js's GET_STATE poll (setInterval) is a fake timer we
+    // clear after each test, instead of a real timer that leaks across files
+    // and fires after the mocks are torn down.
+    vi.useFakeTimers();
     document.body.innerHTML = readPopupHtml();
     window.close = vi.fn();
     browser = installBrowserMock({ activeTabId: TAB_ID });
     loadScript("popup/popup.js");
     await flushMicrotasks();
     browser.tabs.sendMessage.mockClear();
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
   });
 
   function emitState(state) {
