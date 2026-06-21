@@ -165,7 +165,8 @@ function buildRow(target) {
   freq.className = "freq";
   const freqInput = document.createElement("input");
   freqInput.type = "number";
-  freqInput.min = "1";
+  freqInput.min = "0.01";
+  freqInput.step = "any";
   freqInput.className = "freq-input";
   freqInput.addEventListener("change", () =>
     send({ setTargetInterval: { id: target.id, seconds: freqInput.value } })

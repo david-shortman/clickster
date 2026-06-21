@@ -2,8 +2,17 @@ const isChrome = !window["browser"] && !!chrome;
 // Prefer the more standard `browser` before Chrome API
 const browser = isChrome ? chrome : window["browser"];
 
-const TICK_MS = 200;
+// The ticker runs often so sub-second rates are smooth; each tick dispatches
+// as many clicks as are due (catch-up), so the real rate isn't capped by the
+// tick cadence (#22).
+const TICK_MS = 25;
 const DEFAULT_INTERVAL_MS = 1000;
+// Don't run the per-click flash above ~6 CPS — at high rates the animation is
+// just layout thrash and caps throughput (#22).
+const FLASH_MIN_MS = 150;
+// Safety cap on catch-up clicks per tick (e.g. after a backgrounded tab), so a
+// large backlog can't fire as one huge burst.
+const MAX_CLICKS_PER_TICK = 50;
 
 // localStorage access throws in sandboxed iframes (course-ware SCORM players,
 // etc.), which would crash the whole content script on load now that it runs in
@@ -564,6 +573,15 @@ function pointInViewport(x, y) {
   return x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight;
 }
 
+// Dispatch one click for a target at its current point. Crosshair (canvas)
+// points and visible elements hit-test the point (so overlays skip); an element
+// scrolled out of view is clicked directly so auto-clicking keeps going.
+function clickTargetOnce(target, ref, x, y) {
+  if (target.crosshair) return dispatchClickAt(x, y, ref);
+  if (pointInViewport(x, y)) return dispatchClickAt(x, y, ref);
+  return dispatchClickSequence(ref, x, y);
+}
+
 function tick() {
   if (!clicksterEnabled) return;
   const now = Date.now();
@@ -579,26 +597,30 @@ function tick() {
       target.markerEl.style.left = x + "px";
       target.markerEl.style.top = y + "px";
     }
-    if (now - target.lastClickedAt >= target.intervalMs) {
-      let clicked;
-      if (target.crosshair) {
-        // A canvas/coordinate point is only meaningful at an on-screen
-        // coordinate — if it's scrolled away there's nothing to click.
-        clicked = dispatchClickAt(x, y, ref);
-      } else if (pointInViewport(x, y)) {
-        // Visible element: hit-test the point so a modal/overlay covering it
-        // skips the click (we don't click the wrong element).
-        clicked = dispatchClickAt(x, y, ref);
-      } else {
-        // Element scrolled out of view: click it directly so auto-clicking
-        // keeps going while the user scrolls or reads elsewhere.
-        clicked = dispatchClickSequence(ref, x, y);
-      }
-      if (clicked) {
-        target.clickCount += 1;
-        target.lastClickedAt = now;
-        pulseClicked(target);
-      }
+
+    // Catch-up: fire every click due since the last tick, so sub-second rates
+    // aren't throttled to the tick cadence (#22).
+    let fired = 0;
+    while (
+      now - target.lastClickedAt >= target.intervalMs &&
+      fired < MAX_CLICKS_PER_TICK
+    ) {
+      // Off-screen/occluded: leave it due and retry next tick.
+      if (!clickTargetOnce(target, ref, x, y)) break;
+      target.clickCount += 1;
+      target.lastClickedAt += target.intervalMs;
+      fired += 1;
+    }
+    // If a backlog remains after the cap, drop it so it doesn't burst later.
+    if (
+      fired === MAX_CLICKS_PER_TICK &&
+      now - target.lastClickedAt >= target.intervalMs
+    ) {
+      target.lastClickedAt = now;
+    }
+    // One flash per tick, and only at human-visible rates.
+    if (fired > 0 && target.intervalMs >= FLASH_MIN_MS) {
+      pulseClicked(target);
     }
   });
 }

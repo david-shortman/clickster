@@ -290,6 +290,30 @@ describe(`clickster in ${BROWSER}`, () => {
     );
   }, 90000);
 
+  it("clicks rapidly at a sub-second rate (#22)", async () => {
+    await loadFixturePage();
+    await selectTargetByPointer("one");
+
+    await openPopup();
+    await waitForRows(1);
+    const freq = await driver.findElement(By.css(".target .freq-input"));
+    // 0.1s => 10 CPS, far above the old 1-per-tick ceiling.
+    await driver.executeScript(
+      "arguments[0].value='0.1';" +
+        "arguments[0].dispatchEvent(new Event('change',{bubbles:true}));",
+      freq
+    );
+    await clickPopupButton("start-btn");
+    await closePopup();
+
+    // ~10 CPS: expect a clearly-fast climb within a couple of seconds.
+    await driver.wait(
+      async () => (await readCount("count-one")) >= 15,
+      4000,
+      "did not reach a high click rate"
+    );
+  }, 90000);
+
   it("keeps clicking after reload and shows a resume toast (#11)", async () => {
     await loadFixturePage();
     await selectTargetByPointer("one");

@@ -286,6 +286,37 @@ describe("clickster content script", () => {
       expect(state().targets[0].intervalSeconds).toBe(1); // unchanged default
     });
 
+    it("clicks faster than the tick at a sub-second rate (#22)", () => {
+      const target = document.getElementById("target");
+      const clicks = countClicks(target);
+      hoverAndSelect(target);
+      browser.emit({
+        setTargetInterval: { id: state().targets[0].id, seconds: 0.05 },
+      }); // 50ms => 20 CPS, well below the tick cadence
+      browser.emit("START_CLICKING");
+
+      vi.advanceTimersByTime(500); // ~10 clicks at 50ms, via catch-up
+      expect(clicks.mock.calls.length).toBeGreaterThanOrEqual(8);
+    });
+
+    it("suppresses the per-click flash above a few CPS (#22)", () => {
+      const animate = vi.fn();
+      const original = Element.prototype.animate;
+      Element.prototype.animate = animate;
+      try {
+        const target = document.getElementById("target");
+        hoverAndSelect(target);
+        browser.emit({
+          setTargetInterval: { id: state().targets[0].id, seconds: 0.05 },
+        });
+        browser.emit("START_CLICKING");
+        vi.advanceTimersByTime(500);
+        expect(animate).not.toHaveBeenCalled(); // gated at 50ms
+      } finally {
+        Element.prototype.animate = original;
+      }
+    });
+
     it("re-resolves a re-rendered target and keeps clicking the live node (#12)", () => {
       const original = document.getElementById("target");
       hoverAndSelect(original);
