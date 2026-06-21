@@ -475,6 +475,35 @@ describe("clickster content script", () => {
       expect(canvas).toBeTruthy();
     });
 
+    it("nudges the crosshair point with arrow keys while stopped (#33)", () => {
+      selectCanvas(); // 200x100 canvas, offset 0.5,0.5, clicking stopped
+
+      // 1px right: offsetX += 1/200.
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })
+      );
+      expect(browser.__store[SITE_KEY].targets[0].offsetX).toBeCloseTo(0.5 + 1 / 200);
+
+      // Shift+Down: 10px, offsetY += 10/100.
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowDown",
+          shiftKey: true,
+          bubbles: true,
+        })
+      );
+      expect(browser.__store[SITE_KEY].targets[0].offsetY).toBeCloseTo(0.5 + 10 / 100);
+    });
+
+    it("does not nudge while clicking is running (#33)", () => {
+      selectCanvas();
+      browser.emit("START_CLICKING");
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })
+      );
+      expect(browser.__store[SITE_KEY].targets[0].offsetX).toBeCloseTo(0.5);
+    });
+
     it("removes the crosshair when the target is removed", () => {
       selectCanvas();
       expect(document.querySelector(".clickster-crosshair")).not.toBeNull();

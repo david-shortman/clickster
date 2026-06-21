@@ -220,6 +220,7 @@ function createMarker(target) {
     event.preventDefault();
     event.stopPropagation();
     draggingTarget = target;
+    activeCrosshair = target;
   });
   marker.appendChild(pulse);
   marker.appendChild(hbar);
@@ -233,6 +234,9 @@ function createMarker(target) {
 // While a crosshair handle is grabbed, move the point with the cursor and
 // recompute its offset within the anchor.
 let draggingTarget = null;
+// The crosshair point that arrow-key nudges move — the last one placed or
+// dragged (#33).
+let activeCrosshair = null;
 document.addEventListener("mousemove", (event) => {
   if (!draggingTarget || !draggingTarget.ref) return;
   const rect = draggingTarget.ref.getBoundingClientRect();
@@ -413,12 +417,14 @@ function addTarget(element, options) {
   };
   targets.push(target);
   displayAsSelected(target);
+  if (target.crosshair) activeCrosshair = target;
 }
 
 function removeTarget(id) {
   const index = targets.findIndex((t) => t.id === id);
   if (index === -1) return;
   const [removed] = targets.splice(index, 1);
+  if (removed === activeCrosshair) activeCrosshair = null;
   restoreHighlight(removed);
   persistTargets();
   if (targets.length === 0) {
@@ -692,6 +698,44 @@ document.addEventListener("keyup", (event) => {
   if (event.key === "Enter") {
     setSelectedElement(event);
   }
+});
+
+// Arrow keys nudge the active crosshair point for precise placement (#33):
+// 1px, or 10px with Shift. Only while clicking is stopped, and not when typing.
+const NUDGE_DELTAS = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
+document.addEventListener("keydown", (event) => {
+  if (clicksterEnabled || isSelectionModeEnabled) return;
+  const delta = NUDGE_DELTAS[event.key];
+  if (!delta) return;
+  if (!activeCrosshair || !activeCrosshair.ref || !activeCrosshair.ref.isConnected) {
+    return;
+  }
+  const node = event.target;
+  if (
+    node &&
+    (node.tagName === "INPUT" ||
+      node.tagName === "TEXTAREA" ||
+      node.isContentEditable)
+  ) {
+    return;
+  }
+  const rect = activeCrosshair.ref.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const step = event.shiftKey ? 10 : 1;
+  activeCrosshair.offsetX = clamp01(
+    activeCrosshair.offsetX + (delta[0] * step) / rect.width
+  );
+  activeCrosshair.offsetY = clamp01(
+    activeCrosshair.offsetY + (delta[1] * step) / rect.height
+  );
+  positionMarker(activeCrosshair);
+  persistTargets();
+  event.preventDefault();
 });
 document.addEventListener("click", (event) => {
   setSelectedElement(event);
