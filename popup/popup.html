@@ -126,6 +126,32 @@
     padding: 3px;
     font-size: 12px;
   }
+  #settings-btn {
+    margin-left: auto;
+    font-size: 16px;
+  }
+  #settings {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 10px 11px;
+    margin-bottom: 12px;
+  }
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 13px;
+    color: #cfc8f5;
+  }
+  .setting-row input {
+    width: 44px;
+    text-align: center;
+    border: none;
+    border-radius: 4px;
+    padding: 3px;
+    font-size: 12px;
+  }
   .hidden {
     display: none;
   }
@@ -135,8 +161,16 @@
     <img src="../icons/32.png" width="26" height="26" alt="" />
     <h2>Clickster</h2>
     <span id="running-badge" class="hidden">running</span>
+    <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
   </div>
   <div class="divider"></div>
+
+  <div id="settings" class="hidden">
+    <div class="setting-row">
+      <span>Default click rate</span>
+      <span><input id="default-interval" type="number" min="0.01" step="any" /> s</span>
+    </div>
+  </div>
 
   <div id="empty-state">
     <button id="select-element-btn" class="primary">Select an element</button>

@@ -1,10 +1,11 @@
 {
   "manifest_version": 2,
   "name": "Clickster",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "browser_specific_settings": {
     "gecko": {
-      "id": "{d9a80c5d-e4ea-4d11-8437-aedf73f2028b}"
+      "id": "{d9a80c5d-e4ea-4d11-8437-aedf73f2028b}",
+      "data_collection_permissions": { "required": ["none"] }
     }
   },
   "description": "Auto-click any element — or a point on a canvas/game — at a rate you choose, with multiple targets at once.",
@@ -16,6 +17,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
+      "all_frames": true,
       "js": ["clickster.js"]
     }
   ],
@@ -24,5 +26,5 @@
     "default_title": "Clickster",
     "default_popup": "popup/popup.html"
   },
-  "permissions": ["<all_urls>"]
+  "permissions": ["<all_urls>", "storage"]
 }

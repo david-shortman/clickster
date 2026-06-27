@@ -6,30 +6,89 @@ const browser = isChrome ? chrome : window["browser"];
 // load this page as a tab with ?tabId=<target> to pin which tab gets messaged.
 const testTabId = new URLSearchParams(window.location.search).get("tabId");
 
-function sendToTab(tabId, message) {
-  if (tabId >= 0) {
-    browser.tabs.sendMessage(tabId, message);
-  }
-}
+const HOST_ORIGINS = ["*://*/*"];
 
-function send(message) {
-  if (testTabId !== null) {
-    sendToTab(Number(testTabId), message);
-  } else if (isChrome) {
-    browser.tabs.query({ currentWindow: true, active: true }, function (tabs) {
-      if (tabs[0]) sendToTab(tabs[0].id, message);
-    });
-  } else {
-    browser.tabs
-      .query({ currentWindow: true, active: true })
-      .then(function (tabs) {
-        if (tabs[0]) sendToTab(tabs[0].id, message);
+// The tab to message: the one pinned by ?tabId in tests, else the active tab.
+function targetTabId() {
+  if (testTabId !== null) return Promise.resolve(Number(testTabId));
+  if (isChrome) {
+    return new Promise(function (resolve) {
+      browser.tabs.query({ currentWindow: true, active: true }, function (tabs) {
+        resolve(tabs[0] && tabs[0].id);
       });
+    });
   }
+  return browser.tabs
+    .query({ currentWindow: true, active: true })
+    .then(function (tabs) {
+      return tabs[0] && tabs[0].id;
+    });
 }
 
-function armSelection() {
-  send("SELECT_ELEMENT_CLICKED");
+// Deliver a message to the page's content script. Rejects when no content
+// script is there to receive it (e.g. before access is granted on this page);
+// callers decide whether that matters.
+function deliver(message) {
+  return targetTabId().then(function (tabId) {
+    if (tabId == null || tabId < 0) throw new Error("no target tab");
+    if (isChrome) {
+      return new Promise(function (resolve, reject) {
+        browser.tabs.sendMessage(tabId, message, function () {
+          const err = browser.runtime && browser.runtime.lastError;
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    }
+    return browser.tabs.sendMessage(tabId, message);
+  });
+}
+
+// Fire-and-forget: state polling and control messages don't care if the
+// content script isn't reachable yet.
+function send(message) {
+  deliver(message).catch(function () {});
+}
+
+function sendRuntime(message) {
+  if (isChrome) {
+    return new Promise(function (resolve, reject) {
+      browser.runtime.sendMessage(message, function (response) {
+        const err = browser.runtime && browser.runtime.lastError;
+        if (err) reject(err);
+        else resolve(response);
+      });
+    });
+  }
+  return browser.runtime.sendMessage(message);
+}
+
+// "Select an element" / "Add another target". Ask for host access (a one-time
+// prompt that resolves instantly once granted), then let the background worker
+// inject and arm the content script. Falls back to messaging the page directly
+// for the broad dev/E2E build, which has no background worker and auto-injects
+// the content script via the manifest.
+async function armSelection() {
+  if (browser.permissions && browser.permissions.request) {
+    try {
+      await browser.permissions.request({ origins: HOST_ORIGINS });
+    } catch (e) {
+      // Origin isn't optional in this build, or the prompt was dismissed.
+    }
+  }
+  let armed = false;
+  try {
+    const message = { clicksterArm: true };
+    // E2E: pin the worker to the page-under-test (WebDriver can't open the
+    // real browser-action popup, so the popup tab is the "active" one).
+    if (testTabId !== null) message.tabId = Number(testTabId);
+    armed = await sendRuntime(message);
+  } catch (e) {
+    armed = false;
+  }
+  if (!armed) {
+    send("SELECT_ELEMENT_CLICKED");
+  }
   window.close();
 }
 
@@ -45,6 +104,15 @@ document
 document
   .getElementById("stop-btn")
   .addEventListener("click", () => send("STOP_CLICKING"));
+
+const settings = document.getElementById("settings");
+document
+  .getElementById("settings-btn")
+  .addEventListener("click", () => settings.classList.toggle("hidden"));
+const defaultInput = document.getElementById("default-interval");
+defaultInput.addEventListener("change", () =>
+  send({ setDefaultInterval: { seconds: defaultInput.value } })
+);
 
 const list = document.getElementById("targets-list");
 let renderedIds = "";
@@ -97,7 +165,8 @@ function buildRow(target) {
   freq.className = "freq";
   const freqInput = document.createElement("input");
   freqInput.type = "number";
-  freqInput.min = "1";
+  freqInput.min = "0.01";
+  freqInput.step = "any";
   freqInput.className = "freq-input";
   freqInput.addEventListener("change", () =>
     send({ setTargetInterval: { id: target.id, seconds: freqInput.value } })
@@ -141,6 +210,14 @@ function renderState(state) {
   document.getElementById("start-btn").classList.toggle("hidden", state.enabled);
   document.getElementById("stop-btn").classList.toggle("hidden", !state.enabled);
 
+  // Reflect the stored default rate, but don't clobber the field mid-edit.
+  if (
+    state.defaultIntervalSeconds != null &&
+    document.activeElement !== defaultInput
+  ) {
+    defaultInput.value = state.defaultIntervalSeconds;
+  }
+
   const ids = state.targets.map((t) => t.id).join(",");
   if (ids !== renderedIds) {
     list.textContent = "";
@@ -153,9 +230,36 @@ function renderState(state) {
   });
 }
 
-browser.runtime.onMessage.addListener(function (message) {
+// With content scripts in every frame (#13), each frame reports its own state.
+// Collect them by frame and render the union so iframe targets show and are
+// controllable. Frames that stop reporting (navigated away) expire.
+const frameStates = new Map();
+const FRAME_STALE_MS = 1500;
+
+function renderMerged() {
+  const now = Date.now();
+  const fresh = [...frameStates.entries()]
+    .filter(([, v]) => now - v.ts < FRAME_STALE_MS)
+    .sort((a, b) => a[0] - b[0]); // top frame (0) first
+  const merged = { enabled: false, defaultIntervalSeconds: null, targets: [] };
+  for (const [, v] of fresh) {
+    if (v.state.enabled) merged.enabled = true;
+    if (
+      merged.defaultIntervalSeconds == null &&
+      v.state.defaultIntervalSeconds != null
+    ) {
+      merged.defaultIntervalSeconds = v.state.defaultIntervalSeconds;
+    }
+    if (v.state.targets) merged.targets.push(...v.state.targets);
+  }
+  renderState(merged);
+}
+
+browser.runtime.onMessage.addListener(function (message, sender) {
   if (message && message.clicksterState) {
-    renderState(message.clicksterState);
+    const frameId = sender && sender.frameId != null ? sender.frameId : 0;
+    frameStates.set(frameId, { state: message.clicksterState, ts: Date.now() });
+    renderMerged();
   }
 });
 

@@ -1,8 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { installBrowserMock, loadScript } from "./helpers.js";
+import { flushMicrotasks, installBrowserMock, loadScript } from "./helpers.js";
 
 // DEFAULT_INTERVAL_MS in the content script.
 const INTERVAL_MS = 1000;
+// The content script keys this origin's state under "site:<origin>" (#14).
+const SITE_KEY = "site:" + location.origin;
+
+// Load the content script and wait for its async init() (storage.local read) to
+// settle, so module state is hydrated before the test runs.
+async function loadAndInit() {
+  loadScript("clickster.js");
+  await flushMicrotasks();
+}
 
 // jsdom has no layout, so give elements fake rects and a hit-testing
 // elementFromPoint — coordinate clicking is geometry, so the harness must model
@@ -28,7 +37,7 @@ function centerOf(el) {
 describe("clickster content script", () => {
   let browser;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
     localStorage.clear();
     document.body.innerHTML = `
@@ -43,7 +52,7 @@ describe("clickster content script", () => {
     // jsdom doesn't implement scrollIntoView.
     Element.prototype.scrollIntoView = () => {};
     browser = installBrowserMock();
-    loadScript("clickster.js");
+    await loadAndInit();
   });
 
   afterEach(() => {
@@ -122,7 +131,7 @@ describe("clickster content script", () => {
         new MouseEvent("click", { clientX: c.x, clientY: c.y, bubbles: true })
       );
 
-      const stored = JSON.parse(localStorage.getItem("clicksterTargets"));
+      const stored = browser.__store[SITE_KEY].targets;
       expect(stored[0].selector).toContain(":nth-of-type(2)");
       // The generated selector must resolve uniquely back to the same element.
       expect(document.querySelectorAll(stored[0].selector)).toHaveLength(1);
@@ -161,6 +170,26 @@ describe("clickster content script", () => {
       document.dispatchEvent(
         new MouseEvent("click", { clientX: c.x, clientY: c.y, bubbles: true })
       );
+    });
+
+    it("disarms selection when another frame selects (#13)", () => {
+      const target = document.getElementById("target");
+      browser.emit("SELECT_ELEMENT_CLICKED");
+      const c = centerOf(target);
+      document.dispatchEvent(
+        new MouseEvent("mousemove", { clientX: c.x, clientY: c.y })
+      );
+      expect(target.style.border).toContain("red");
+
+      // A sibling frame completed the selection — this frame disarms.
+      browser.emit("STOP_SELECTION_MODE");
+      expect(target.style.border).not.toContain("red");
+
+      // A subsequent click must not select anything here.
+      document.dispatchEvent(
+        new MouseEvent("click", { clientX: c.x, clientY: c.y, bubbles: true })
+      );
+      expect(state().targets).toHaveLength(0);
     });
 
     it("removes a target and restores its highlight", () => {
@@ -241,6 +270,53 @@ describe("clickster content script", () => {
       expect(slowClicks).toHaveBeenCalledTimes(1);
     });
 
+    it("applies the configured default rate to new targets (#7)", () => {
+      browser.emit({ setDefaultInterval: { seconds: 5 } });
+
+      hoverAndSelect(document.getElementById("target"));
+      expect(state().targets[0].intervalSeconds).toBe(5);
+      // Persisted globally (so it follows the user), and reported back in state.
+      expect(browser.__store.defaultIntervalMs).toBe(5000);
+      expect(state().defaultIntervalSeconds).toBe(5);
+    });
+
+    it("ignores an invalid default rate (#7)", () => {
+      browser.emit({ setDefaultInterval: { seconds: 0 } });
+      hoverAndSelect(document.getElementById("target"));
+      expect(state().targets[0].intervalSeconds).toBe(1); // unchanged default
+    });
+
+    it("clicks faster than the tick at a sub-second rate (#22)", () => {
+      const target = document.getElementById("target");
+      const clicks = countClicks(target);
+      hoverAndSelect(target);
+      browser.emit({
+        setTargetInterval: { id: state().targets[0].id, seconds: 0.05 },
+      }); // 50ms => 20 CPS, well below the tick cadence
+      browser.emit("START_CLICKING");
+
+      vi.advanceTimersByTime(500); // ~10 clicks at 50ms, via catch-up
+      expect(clicks.mock.calls.length).toBeGreaterThanOrEqual(8);
+    });
+
+    it("suppresses the per-click flash above a few CPS (#22)", () => {
+      const animate = vi.fn();
+      const original = Element.prototype.animate;
+      Element.prototype.animate = animate;
+      try {
+        const target = document.getElementById("target");
+        hoverAndSelect(target);
+        browser.emit({
+          setTargetInterval: { id: state().targets[0].id, seconds: 0.05 },
+        });
+        browser.emit("START_CLICKING");
+        vi.advanceTimersByTime(500);
+        expect(animate).not.toHaveBeenCalled(); // gated at 50ms
+      } finally {
+        Element.prototype.animate = original;
+      }
+    });
+
     it("re-resolves a re-rendered target and keeps clicking the live node (#12)", () => {
       const original = document.getElementById("target");
       hoverAndSelect(original);
@@ -290,6 +366,24 @@ describe("clickster content script", () => {
 
       expect(occluderClicks).not.toHaveBeenCalled();
       expect(state().targets[0].clickCount).toBe(0);
+    });
+
+    it("keeps clicking an element after it scrolls out of view (#5)", () => {
+      const target = document.getElementById("target");
+      const clicks = countClicks(target);
+      hoverAndSelect(target);
+      browser.emit("START_CLICKING");
+      vi.advanceTimersByTime(INTERVAL_MS);
+      expect(clicks).toHaveBeenCalledTimes(1);
+
+      // Scroll the target far below the viewport — its click point is now
+      // off-screen. Unlike an occluder (in viewport, blocked), an off-screen
+      // element should keep being clicked directly.
+      place(target, 0, window.innerHeight + 500, 100, 40);
+      vi.advanceTimersByTime(INTERVAL_MS * 2);
+
+      expect(clicks).toHaveBeenCalledTimes(3);
+      expect(state().targets[0].clickCount).toBe(3);
     });
 
     it("pauses and resumes an individual target", () => {
@@ -375,10 +469,39 @@ describe("clickster content script", () => {
       );
       document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
 
-      const stored = JSON.parse(localStorage.getItem("clicksterTargets"));
+      const stored = browser.__store[SITE_KEY].targets;
       expect(stored[0].offsetX).toBeCloseTo(0.2);
       expect(stored[0].offsetY).toBeCloseTo(0.25);
       expect(canvas).toBeTruthy();
+    });
+
+    it("nudges the crosshair point with arrow keys while stopped (#33)", () => {
+      selectCanvas(); // 200x100 canvas, offset 0.5,0.5, clicking stopped
+
+      // 1px right: offsetX += 1/200.
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })
+      );
+      expect(browser.__store[SITE_KEY].targets[0].offsetX).toBeCloseTo(0.5 + 1 / 200);
+
+      // Shift+Down: 10px, offsetY += 10/100.
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowDown",
+          shiftKey: true,
+          bubbles: true,
+        })
+      );
+      expect(browser.__store[SITE_KEY].targets[0].offsetY).toBeCloseTo(0.5 + 10 / 100);
+    });
+
+    it("does not nudge while clicking is running (#33)", () => {
+      selectCanvas();
+      browser.emit("START_CLICKING");
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })
+      );
+      expect(browser.__store[SITE_KEY].targets[0].offsetX).toBeCloseTo(0.5);
     });
 
     it("removes the crosshair when the target is removed", () => {
@@ -404,60 +527,60 @@ describe("clickster content script", () => {
   });
 
   describe("persistence across reload (#11)", () => {
-    // A fresh script run against the same DOM + localStorage is what a real
-    // page reload looks like. Clear timers first, since navigating away tears
-    // down the old page's intervals.
-    function reload() {
+    // A fresh script run against the same DOM is what a real reload looks like.
+    // storage.local persists across it (carry the store, like real extension
+    // storage), and the script's async init() must settle before we assert.
+    async function reload() {
       vi.clearAllTimers();
-      browser = installBrowserMock();
-      loadScript("clickster.js");
+      browser = installBrowserMock({ store: browser.__store });
+      await loadAndInit();
     }
 
-    it("resumes clicking after reload when it was running", () => {
+    it("resumes clicking after reload when it was running", async () => {
       const target = document.getElementById("target");
       hoverAndSelect(target);
       browser.emit("START_CLICKING");
 
-      reload();
+      await reload();
 
       const clicks = countClicks(target);
       vi.advanceTimersByTime(INTERVAL_MS * 2);
       expect(clicks).toHaveBeenCalledTimes(2);
     });
 
-    it("stays stopped after reload when it was not running", () => {
+    it("stays stopped after reload when it was not running", async () => {
       const target = document.getElementById("target");
       hoverAndSelect(target);
       browser.emit("START_CLICKING");
       browser.emit("STOP_CLICKING");
 
-      reload();
+      await reload();
 
       const clicks = countClicks(target);
       vi.advanceTimersByTime(INTERVAL_MS * 2);
       expect(clicks).not.toHaveBeenCalled();
     });
 
-    it("restores targets (with their interval) after reload", () => {
+    it("restores targets (with their interval) after reload", async () => {
       hoverAndSelect(document.getElementById("target"));
       browser.emit({
         setTargetInterval: { id: state().targets[0].id, seconds: 4 },
       });
 
-      reload();
+      await reload();
 
       const s = state();
       expect(s.targets).toHaveLength(1);
       expect(s.targets[0].intervalSeconds).toBe(4);
     });
 
-    it("does not resume after the last target is removed and reloaded", () => {
+    it("does not resume after the last target is removed and reloaded", async () => {
       const target = document.getElementById("target");
       hoverAndSelect(target);
       browser.emit("START_CLICKING");
       browser.emit({ removeTargetId: state().targets[0].id });
 
-      reload();
+      await reload();
 
       const clicks = countClicks(target);
       vi.advanceTimersByTime(INTERVAL_MS * 2);
@@ -466,37 +589,37 @@ describe("clickster content script", () => {
   });
 
   describe("resume toast", () => {
-    function reload() {
+    async function reload() {
       vi.clearAllTimers();
-      browser = installBrowserMock();
-      loadScript("clickster.js");
+      browser = installBrowserMock({ store: browser.__store });
+      await loadAndInit();
     }
     const toast = () => document.getElementById("clickster-resume-toast");
 
-    it("shows a sticky toast when clicking resumes after reload", () => {
+    it("shows a sticky toast when clicking resumes after reload", async () => {
       hoverAndSelect(document.getElementById("target"));
       browser.emit("START_CLICKING");
       expect(toast()).toBeNull();
 
-      reload();
+      await reload();
       expect(toast()).not.toBeNull();
       expect(toast().textContent).toContain("still auto-clicking");
     });
 
-    it("does not show a toast when clicking did not resume", () => {
+    it("does not show a toast when clicking did not resume", async () => {
       hoverAndSelect(document.getElementById("target"));
       browser.emit("START_CLICKING");
       browser.emit("STOP_CLICKING");
 
-      reload();
+      await reload();
       expect(toast()).toBeNull();
     });
 
-    it("its Stop button halts clicking and removes the toast", () => {
+    it("its Stop button halts clicking and removes the toast", async () => {
       const target = document.getElementById("target");
       hoverAndSelect(target);
       browser.emit("START_CLICKING");
-      reload();
+      await reload();
 
       document.getElementById("clickster-resume-toast-stop").click();
       expect(toast()).toBeNull();
@@ -504,22 +627,22 @@ describe("clickster content script", () => {
       const clicks = countClicks(target);
       vi.advanceTimersByTime(INTERVAL_MS * 2);
       expect(clicks).not.toHaveBeenCalled();
-      reload();
+      await reload();
       expect(toast()).toBeNull();
     });
 
-    it("suppresses the toast permanently after 'Don't show again'", () => {
+    it("suppresses the toast permanently after 'Don't show again'", async () => {
       hoverAndSelect(document.getElementById("target"));
       browser.emit("START_CLICKING");
-      reload();
+      await reload();
 
       const link = [...toast().querySelectorAll("a")].find((a) =>
         a.textContent.includes("Don't show again")
       );
       link.click();
-      expect(localStorage.getItem("clicksterHideResumeToast")).toBe("true");
+      expect(browser.__store[SITE_KEY].hideResumeToast).toBe(true);
 
-      reload();
+      await reload();
       expect(toast()).toBeNull();
     });
   });

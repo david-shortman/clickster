@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<meta charset="utf-8" />
+<title>Clickster iframe host</title>
+<!--
+  Host page for the #13 cross-frame E2E: it embeds the counter fixture in a
+  same-origin iframe. With all_frames the content script runs inside the frame,
+  so a target picked there is auto-clickable.
+-->
+<style>
+  body { font-family: sans-serif; margin: 24px; }
+  iframe { width: 640px; height: 420px; border: 2px solid #635bff; }
+</style>
+<h1>Host page</h1>
+<p>The clicker target lives inside the iframe below.</p>
+<iframe id="frame" src="counter.html"></iframe>

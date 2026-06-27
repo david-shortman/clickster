@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   flushMicrotasks,
   installBrowserMock,
@@ -27,12 +27,21 @@ describe("clickster popup", () => {
   let browser;
 
   beforeEach(async () => {
+    // Fake timers so popup.js's GET_STATE poll (setInterval) is a fake timer we
+    // clear after each test, instead of a real timer that leaks across files
+    // and fires after the mocks are torn down.
+    vi.useFakeTimers();
     document.body.innerHTML = readPopupHtml();
     window.close = vi.fn();
     browser = installBrowserMock({ activeTabId: TAB_ID });
     loadScript("popup/popup.js");
     await flushMicrotasks();
     browser.tabs.sendMessage.mockClear();
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
   });
 
   function emitState(state) {
@@ -143,6 +152,108 @@ describe("clickster popup", () => {
       TAB_ID,
       "SELECT_ELEMENT_CLICKED",
     ]);
+  });
+
+  it("requests host access then hands off to the background worker (narrow build)", async () => {
+    document.body.innerHTML = readPopupHtml();
+    window.close = vi.fn();
+    const narrow = installBrowserMock({ activeTabId: TAB_ID, permissions: true });
+    narrow.runtime.sendMessage = vi.fn().mockResolvedValue(true); // worker acks
+    loadScript("popup/popup.js");
+    await flushMicrotasks();
+    narrow.tabs.sendMessage.mockClear();
+
+    document.getElementById("select-element-btn").click();
+    await flushMicrotasks();
+
+    expect(narrow.permissions.request).toHaveBeenCalledWith({
+      origins: ["*://*/*"],
+    });
+    expect(narrow.runtime.sendMessage).toHaveBeenCalledWith({
+      clicksterArm: true,
+    });
+    // Worker handled injection+arm, so the popup doesn't also poke the page.
+    expect(narrow.tabs.sendMessage).not.toHaveBeenCalledWith(
+      TAB_ID,
+      "SELECT_ELEMENT_CLICKED"
+    );
+    expect(window.close).toHaveBeenCalled();
+  });
+
+  it("arms the page directly when no background worker answers (broad build)", async () => {
+    document.body.innerHTML = readPopupHtml();
+    window.close = vi.fn();
+    const broad = installBrowserMock({ activeTabId: TAB_ID });
+    broad.runtime.sendMessage = vi.fn().mockRejectedValue(new Error("no worker"));
+    loadScript("popup/popup.js");
+    await flushMicrotasks();
+    broad.tabs.sendMessage.mockClear();
+
+    document.getElementById("select-element-btn").click();
+    await flushMicrotasks();
+
+    expect(broad.tabs.sendMessage).toHaveBeenCalledWith(
+      TAB_ID,
+      "SELECT_ELEMENT_CLICKED"
+    );
+    expect(window.close).toHaveBeenCalled();
+  });
+
+  it("toggles the settings panel with the gear button", () => {
+    expect(hidden("settings")).toBe(true);
+    document.getElementById("settings-btn").click();
+    expect(hidden("settings")).toBe(false);
+    document.getElementById("settings-btn").click();
+    expect(hidden("settings")).toBe(true);
+  });
+
+  it("sends the new default rate when the settings input changes (#7)", async () => {
+    const input = document.getElementById("default-interval");
+    input.value = "4";
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await flushMicrotasks();
+    expect(browser.tabs.sendMessage.mock.calls).toContainEqual([
+      TAB_ID,
+      { setDefaultInterval: { seconds: "4" } },
+    ]);
+  });
+
+  it("reflects the stored default rate in the settings input (#7)", () => {
+    emitState({ enabled: false, targets: [], defaultIntervalSeconds: 6 });
+    expect(document.getElementById("default-interval").value).toBe("6");
+  });
+
+  it("merges target states reported by multiple frames (#13)", () => {
+    // Top frame: one target, not running.
+    browser.emit(
+      {
+        clicksterState: {
+          enabled: false,
+          defaultIntervalSeconds: 1,
+          targets: [makeTarget({ id: 100, label: "Top" })],
+        },
+      },
+      { frameId: 0 }
+    );
+    // An iframe: another target, and it's running.
+    browser.emit(
+      {
+        clicksterState: {
+          enabled: true,
+          defaultIntervalSeconds: 1,
+          targets: [makeTarget({ id: 200, label: "In frame" })],
+        },
+      },
+      { frameId: 1 }
+    );
+
+    const rows = document.getElementById("targets-list").children;
+    expect(rows).toHaveLength(2);
+    const labels = [...rows].map((r) => r.querySelector(".target-label").textContent);
+    expect(labels).toEqual(["Top", "In frame"]);
+    // Running in any frame => the popup shows running and the Stop button.
+    expect(hidden("running-badge")).toBe(false);
+    expect(hidden("stop-btn")).toBe(false);
   });
 
   it("sends removeTargetId when a row's remove button is clicked", async () => {

@@ -2,6 +2,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Browser, Builder, By, until } from "selenium-webdriver";
 import firefox from "selenium-webdriver/firefox.js";
+import chrome from "selenium-webdriver/chrome.js";
 import {
   detectFirefoxBinary,
   ensureGeckodriver,
@@ -9,18 +10,58 @@ import {
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-// Must match browser_specific_settings.gecko.id in manifest.json.
-const EXTENSION_ID = "{d9a80c5d-e4ea-4d11-8437-aedf73f2028b}";
-// Arbitrary fixed UUID pre-seeded via the extensions.webextensions.uuids
-// pref so moz-extension:// URLs are deterministic across runs (the same
-// technique Privacy Badger and Ghostery use in their suites).
-const EXTENSION_UUID = "8d3a5c1e-2f74-4b9a-9c0d-6e1b2a7f4d52";
+// Which browser to drive: BROWSER=chrome | firefox (default firefox).
+export const BROWSER = process.env.BROWSER || "firefox";
+
+// CLICKSTER_NARROW=1 drives the narrowed store build (activeTab + optional host
+// access) instead of the broad dev build. Firefox only — see e2e/README.md for
+// why Chrome's optional-permission grant can't be auto-accepted in WebDriver.
+export const NARROW = process.env.CLICKSTER_NARROW === "1";
+
+// Firefox: fixed UUID seeded via the extensions.webextensions.uuids pref so
+// moz-extension:// URLs are deterministic (Privacy Badger/Ghostery technique).
+const FIREFOX_EXTENSION_ID = "{d9a80c5d-e4ea-4d11-8437-aedf73f2028b}";
+const FIREFOX_UUID = "8d3a5c1e-2f74-4b9a-9c0d-6e1b2a7f4d52";
+// Chrome: fixed ID derived from the manifest `key` (see tools/build-chrome.mjs).
+const CHROME_ID = "mnabffamileocpjnkmhemkidnekhdlle";
 
 export function popupUrl(query = "") {
-  return `moz-extension://${EXTENSION_UUID}/popup/popup.html${query}`;
+  return BROWSER === "chrome"
+    ? `chrome-extension://${CHROME_ID}/popup/popup.html${query}`
+    : `moz-extension://${FIREFOX_UUID}/popup/popup.html${query}`;
 }
 
 export async function buildDriver() {
+  return BROWSER === "chrome" ? buildChromeDriver() : buildFirefoxDriver();
+}
+
+async function buildChromeDriver() {
+  const options = new chrome.Options();
+  if (!process.env.HEADFUL) {
+    options.addArguments("--headless=new");
+  }
+  // Load the unpacked MV3 build (built by build:chrome). The manifest `key`
+  // gives it the fixed CHROME_ID.
+  options.addArguments("--load-extension=" + resolve(repoRoot, "dist/chrome"));
+  options.addArguments(
+    "--no-sandbox",
+    "--disable-gpu",
+    "--disable-dev-shm-usage",
+    // Consumer Chrome (129+) ignores --load-extension; this re-enables it.
+    "--disable-features=DisableLoadExtensionCommandLineSwitch"
+  );
+  options.excludeSwitches("disable-extensions");
+  // Use Chrome for Testing, which permits --load-extension (consumer Chrome —
+  // local or on CI runners — blocks it outright).
+  options.setBrowserVersion("stable");
+  options.setPageLoadStrategy("none");
+  return new Builder()
+    .forBrowser(Browser.CHROME)
+    .setChromeOptions(options)
+    .build();
+}
+
+async function buildFirefoxDriver() {
   const options = new firefox.Options();
   if (!process.env.HEADFUL) {
     options.addArguments("-headless");
@@ -31,12 +72,19 @@ export async function buildDriver() {
   options.setPageLoadStrategy("none");
   options.setPreference(
     "extensions.webextensions.uuids",
-    JSON.stringify({ [EXTENSION_ID]: EXTENSION_UUID })
+    JSON.stringify({ [FIREFOX_EXTENSION_ID]: FIREFOX_UUID })
   );
   // The popup calls window.close() after "Select a target". Tabs the driver
   // opened aren't script-opened, so allow scripted close to keep that flow
   // deterministic in tests.
   options.setPreference("dom.allow_scripts_to_close_windows", true);
+  // Narrow build: auto-grant runtime optional-permission requests instead of
+  // showing the door hanger, so permissions.request() resolves granted. This
+  // is exactly how Firefox itself skips the prompt (ext-permissions.js gates
+  // the prompt on this pref, then grants).
+  if (NARROW) {
+    options.setPreference("extensions.webextOptionalPermissionPrompts", false);
+  }
 
   const builder = new Builder()
     .forBrowser(Browser.FIREFOX)
@@ -49,8 +97,10 @@ export async function buildDriver() {
   const driver = await builder.build();
 
   // Temporary install accepts our unsigned zip on stock Firefox — the same
-  // mechanism as about:debugging's "Load Temporary Add-on".
-  await driver.installAddon(resolve(repoRoot, "dist/clickster.zip"), true);
+  // mechanism as about:debugging's "Load Temporary Add-on". The narrow build
+  // ships the activeTab + optional-host manifest and a background page.
+  const addon = NARROW ? "dist/clickster-firefox.zip" : "dist/clickster.zip";
+  await driver.installAddon(resolve(repoRoot, addon), true);
   return driver;
 }
 

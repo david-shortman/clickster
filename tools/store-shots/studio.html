@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<meta charset="utf-8" />
+<title>Clickster store shots</title>
+<!--
+  Store-listing screenshot studio.
+  Renders one 1280x800 scene per load, chosen via ?scene=N&browser=chrome|firefox.
+  The popup markup/CSS and on-page overlays are copied verbatim from
+  popup/popup.html and clickster.js so the shots match the shipped extension.
+  Scenes: 1 element ring, 2 single target popup, 3 canvas crosshair, 4 many targets.
+-->
+<style>
+  :root {
+    --navy: #160644;
+    --navy-deep: #0a0226;
+    --ink: #f4f0ff;
+    --muted: #cfc8f5;
+    --r1: #b827fc;
+    --r2: #2c90fc;
+    --r3: #b8fd33;
+    --r4: #fec837;
+    --r5: #fd1892;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+  #stage {
+    position: relative;
+    width: 1280px;
+    height: 800px;
+    overflow: hidden;
+    background:
+      radial-gradient(900px 700px at 85% -10%, #2a1170 0%, rgba(42, 17, 112, 0) 60%),
+      radial-gradient(700px 700px at 0% 110%, #240d63 0%, rgba(36, 13, 99, 0) 55%),
+      linear-gradient(160deg, #1b0a52 0%, var(--navy) 45%, var(--navy-deep) 100%);
+    color: var(--ink);
+  }
+  /* soft rainbow glow blobs for depth */
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(90px);
+    opacity: 0.25;
+    pointer-events: none;
+  }
+  .blob.a { width: 420px; height: 420px; right: -80px; top: -120px;
+    background: radial-gradient(circle, var(--r1), transparent 70%); }
+  .blob.b { width: 380px; height: 380px; left: -120px; bottom: -140px;
+    background: radial-gradient(circle, var(--r2), transparent 70%); }
+
+  /* ---- layout: caption column + artifact column ---- */
+  .grid {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+  }
+  .grid.cap-right { grid-template-areas: "art cap"; }
+  .grid.cap-left  { grid-template-areas: "cap art"; }
+  .caption { grid-area: cap; padding: 0 64px; }
+  .art { grid-area: art; display: flex; align-items: center; justify-content: center; padding: 0 40px; }
+
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 17px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 22px;
+  }
+  .eyebrow .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--r1), var(--r5));
+  }
+  h1 {
+    margin: 0; font-size: 62px; line-height: 1.04; font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  h1 .rainbow {
+    background: linear-gradient(100deg, var(--r1), var(--r2) 35%, var(--r3) 55%, var(--r4) 75%, var(--r5));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { margin: 22px 0 0; font-size: 22px; line-height: 1.45; color: var(--muted); max-width: 460px; font-weight: 500; }
+
+  /* ---- browser window mockup ---- */
+  .browser {
+    width: 560px;
+    border-radius: 16px;
+    background: #fbfbfe;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.45), 0 8px 22px rgba(0,0,0,0.3);
+    overflow: visible;
+    position: relative;
+  }
+  .toolbar {
+    height: 52px; display: flex; align-items: center; gap: 12px;
+    padding: 0 14px; border-radius: 16px 16px 0 0;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+  }
+  .toolbar.chrome { background: #dee1e6; }
+  .toolbar.firefox { background: #f0f0f4; }
+  .lights { display: flex; gap: 7px; }
+  .lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .lights .r { background: #ff5f57; } .lights .y { background: #febc2e; } .lights .g { background: #28c840; }
+  .omni {
+    flex: 1; height: 32px; border-radius: 16px; background: #fff;
+    display: flex; align-items: center; padding: 0 14px; gap: 8px;
+    color: #5f6368; font-size: 13px; border: 1px solid rgba(0,0,0,0.06);
+  }
+  .toolbar.firefox .omni { border-radius: 8px; }
+  .omni svg { flex: none; }
+  .ext-btn {
+    width: 34px; height: 34px; border-radius: 8px; display: flex;
+    align-items: center; justify-content: center; position: relative;
+    background: rgba(184, 39, 252, 0.12);
+    outline: 2px solid rgba(184, 39, 252, 0.55);
+  }
+  .ext-btn img { width: 22px; height: 22px; display: block; }
+  .toolbar-ico { width: 18px; height: 18px; color: #5f6368; flex: none; }
+  .viewport {
+    height: 470px; border-radius: 0 0 16px 16px; overflow: hidden;
+    position: relative; background: #fff;
+  }
+
+  /* popup floats below the extension button like a real browser-action popup */
+  .popup-anchor { position: absolute; top: 50px; right: 40px; z-index: 20; }
+  .popup-anchor::before {
+    content: ""; position: absolute; top: -7px; right: 16px;
+    border: 7px solid transparent; border-bottom-color: var(--r1); border-top: 0;
+    filter: drop-shadow(0 -1px 0 rgba(0,0,0,0.1));
+  }
+
+  /* =========================================================
+     EXACT popup styles (from popup/popup.html), scoped to .ck
+     ========================================================= */
+  .ck {
+    background-color: #160644;
+    font-family: Helvetica, sans-serif;
+    color: #f4f0ff;
+    width: 300px;
+    border: 4px solid;
+    border-image: linear-gradient(to bottom right, #b827fc 0%, #2c90fc 25%, #b8fd33 50%, #fec837 75%, #fd1892 100%);
+    border-image-slice: 1;
+    padding: 6px 12px 14px;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+  }
+  .ck h2 { margin: 4px 0; font-family: "Courier New", Courier, monospace; font-size: 22px; }
+  .ck .divider { height: 2px; margin: 8px 0 14px; background-image: linear-gradient(to right, #b827fc, #2c90fc, #b8fd33, #fec837, #fd1892); }
+  .ck button { font-family: Helvetica, sans-serif; cursor: pointer; }
+  .ck .primary { width: 100%; background-color: #bf16ab; color: #fff; border: none; border-radius: 6px; padding: 12px; font-size: 15px; margin: 4px 0; }
+  .ck .ghost { width: 100%; background: transparent; color: #f4f0ff; border: 1px dashed rgba(255,255,255,0.3); border-radius: 6px; padding: 9px; font-size: 13px; margin: 4px 0 10px; }
+  .ck .running-badge { margin-left: auto; font-size: 12px; background: #b8fd33; color: #160644; border-radius: 20px; padding: 2px 10px; font-weight: bold; }
+  .ck .target { background: rgba(255,255,255,0.06); border-radius: 10px; padding: 10px 11px; margin-bottom: 8px; }
+  .ck .target-head { display: flex; align-items: center; gap: 6px; }
+  .ck .target-label { font-weight: bold; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ck .icon-btn { background: transparent; border: none; color: #cfc8f5; font-size: 15px; padding: 2px 4px; line-height: 1; }
+  .ck .remove-btn { margin-left: auto; }
+  .ck .target-stats { display: flex; gap: 14px; margin: 7px 0 8px; font-size: 12px; color: #cfc8f5; }
+  .ck .freq { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9189c0; }
+  .ck .freq input { width: 44px; text-align: center; border: none; border-radius: 4px; padding: 3px; font-size: 12px; }
+  .ck .header-row { display: flex; align-items: center; gap: 8px; }
+
+  /* ---- scene 1: webpage with a ringed button ---- */
+  .webpage { position: absolute; inset: 0; background: #f6f7fb; padding: 30px 34px; }
+  .web-card {
+    background: #fff; border: 1px solid #e6e8ef; border-radius: 12px; padding: 22px 24px;
+    box-shadow: 0 10px 30px rgba(20,30,80,0.08); max-width: 420px; margin: 26px auto 0;
+  }
+  .web-card .crumb { font-size: 12px; color: #8a90a6; margin-bottom: 8px; }
+  .web-card h3 { margin: 0 0 6px; font-size: 19px; color: #1a1f36; }
+  .web-card p { margin: 0 0 18px; font-size: 13px; color: #6b7280; line-height: 1.5; }
+  .web-actions { display: flex; gap: 10px; }
+  .web-btn {
+    background: #635bff; color: #fff; border: none; border-radius: 8px;
+    padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .web-btn.sec { background: #eef0f6; color: #3a4051; }
+  /* rainbow selection ring copied from clickster.js SELECTED_SHADOW */
+  .ring {
+    box-shadow: 0 0 0 1px #b827fc, 0 0 0 2px #2c90fc, 0 0 0 3px #b8fd33, 0 0 0 4px #fec837, 0 0 0 5px #fd1892;
+  }
+
+  /* ---- scene 3: canvas game ---- */
+  .game {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(420px 320px at 50% 42%, #3a1d8a 0%, rgba(58,29,138,0) 70%),
+      linear-gradient(160deg, #241060, #120536);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .game .hud {
+    position: absolute; top: 18px; left: 20px; color: #e9e3ff;
+    font-weight: 800; font-size: 15px; letter-spacing: 0.02em;
+  }
+  .game .hud small { display: block; font-weight: 600; color: #b9add9; font-size: 12px; }
+  .cookie {
+    width: 230px; height: 230px; border-radius: 50%; position: relative;
+    background: radial-gradient(circle at 35% 30%, #c98a3c, #7a4a18 70%, #5a3510);
+    box-shadow: inset -16px -20px 40px rgba(0,0,0,0.45), 0 18px 40px rgba(0,0,0,0.4);
+  }
+  .chip { position: absolute; width: 26px; height: 22px; border-radius: 45%; background: #3a2410; }
+  /* crosshair copied from clickster.js createMarker() */
+  .crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; z-index: 5; }
+  .crosshair .hbar { position: absolute; left: -16px; top: -1.5px; width: 32px; height: 3px; border-radius: 2px;
+    background: linear-gradient(135deg, #b827fc, #2c90fc, #b8fd33, #fec837, #fd1892); }
+  .crosshair .vbar { position: absolute; left: -1.5px; top: -16px; width: 3px; height: 32px; border-radius: 2px;
+    background: linear-gradient(135deg, #b827fc, #2c90fc, #b8fd33, #fec837, #fd1892); }
+  .crosshair .pulse { position: absolute; left: -13px; top: -13px; width: 26px; height: 26px; border-radius: 50%;
+    opacity: 0.9; box-shadow: 0 0 0 1px #b827fc, 0 0 0 2px #2c90fc, 0 0 0 3px #b8fd33, 0 0 0 4px #fec837, 0 0 0 5px #fd1892; }
+  .crosshair .tip {
+    position: absolute; left: 26px; top: -34px; white-space: nowrap;
+    background: #160644; color: #fff; font-size: 12px; font-weight: 700;
+    padding: 4px 9px; border-radius: 8px; border: 1.5px solid #b8fd33;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+  }
+
+  /* rainbow cursor (scene 1) */
+  .cursor { position: absolute; width: 76px; height: 76px; z-index: 30; filter: drop-shadow(0 6px 10px rgba(0,0,0,0.35)); }
+</style>
+
+<div id="stage"><div class="blob a"></div><div class="blob b"></div></div>
+
+<script>
+  const ICON = "../../icons/512.png";
+  const params = new URLSearchParams(location.search);
+  const scene = Number(params.get("scene") || 1);
+  const browser = params.get("browser") === "firefox" ? "firefox" : "chrome";
+
+  // Rainbow arrow cursor, matching the promo_1 aesthetic.
+  function cursorSVG() {
+    return `<svg class="cursor" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="">
+      <defs><linearGradient id="cg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#b827fc"/><stop offset=".3" stop-color="#2c90fc"/>
+        <stop offset=".55" stop-color="#b8fd33"/><stop offset=".78" stop-color="#fec837"/>
+        <stop offset="1" stop-color="#fd1892"/></linearGradient></defs>
+      <path d="M5 3 L5 19 L9.2 15.2 L11.8 21 L14.5 19.8 L11.9 14 L17 14 Z"
+        fill="#fff" stroke="url(#cg)" stroke-width="1.4" stroke-linejoin="round"/>
+    </svg>`;
+  }
+
+  function omniIcon() {
+    return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9aa0ac" stroke-width="2">
+      <rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`;
+  }
+  function ffMenu() {
+    return `<svg class="toolbar-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>`;
+  }
+  function ffShield() {
+    return `<svg class="toolbar-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg>`;
+  }
+  function chromeMenu() {
+    return `<svg class="toolbar-ico" viewBox="0 0 24 24" fill="#5f6368"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`;
+  }
+
+  function toolbar(host) {
+    const url = scene === 3 ? "idle-clicker.example/play" : "app.example.com/dashboard";
+    if (browser === "chrome") {
+      return `<div class="toolbar chrome">
+        <div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+        <div class="omni">${omniIcon()}<span>${url}</span></div>
+        <div class="ext-btn"><img src="${ICON}" alt=""></div>
+        ${chromeMenu()}
+      </div>`;
+    }
+    return `<div class="toolbar firefox">
+      <div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+      <div class="omni">${omniIcon()}<span>${url}</span></div>
+      <div class="ext-btn"><img src="${ICON}" alt=""></div>
+      ${ffShield()}${ffMenu()}
+    </div>`;
+  }
+
+  // ---- popup builders (mirror popup.js output) ----
+  function targetRow({label, count, countdown, every, paused}) {
+    const pauseIco = paused ? "▶" : "⏸";
+    return `<div class="target">
+      <div class="target-head">
+        <span class="target-label">${label}</span>
+        <button class="icon-btn">\u{1F441}</button>
+        <button class="icon-btn">${pauseIco}</button>
+        <button class="icon-btn remove-btn">✕</button>
+      </div>
+      <div class="target-stats"><span>${count} clicks</span><span>${countdown}</span></div>
+      <div class="freq">every <input value="${every}"> s</div>
+    </div>`;
+  }
+  function popup(rows, {running}) {
+    return `<div class="ck">
+      <div class="header-row">
+        <img src="${ICON}" width="26" height="26" alt="">
+        <h2>Clickster</h2>
+        ${running ? '<span class="running-badge">running</span>' : ''}
+      </div>
+      <div class="divider"></div>
+      <div>${rows}</div>
+      <button class="ghost">+ Add another target</button>
+      <button class="primary">${running ? 'Stop' : 'Start'}</button>
+    </div>`;
+  }
+
+  // ---- scenes ----
+  const SCENES = {
+    1: {
+      capSide: "cap-left",
+      eyebrow: "Auto-clicker for the web",
+      h1: 'Auto-click <span class="rainbow">anything</span> on a page',
+      sub: "Point at any button, link, or element. Clickster rings it and clicks it for you.",
+      art: () => `<div class="browser">${toolbar()}<div class="viewport">
+        <div class="webpage">
+          <div class="web-card">
+            <div class="crumb">Rewards</div>
+            <h3>Daily bonus is ready</h3>
+            <p>Collect your reward, then come back tomorrow for the next one.</p>
+            <div class="web-actions">
+              <button class="web-btn ring">Claim reward</button>
+              <button class="web-btn sec">Later</button>
+            </div>
+          </div>
+        </div>
+        ${cursorSVG().replace('class="cursor"','class="cursor" style="left:96px;top:150px"')}
+      </div></div>`
+    },
+    2: {
+      capSide: "cap-right",
+      eyebrow: "Set it and forget it",
+      h1: 'Pick a target,<br>set the <span class="rainbow">pace</span>',
+      sub: "Choose how often each target clicks — then press Start. A live count and countdown keep you posted.",
+      art: () => `<div class="browser">${toolbar()}<div class="viewport">
+        <div class="webpage"><div class="web-card">
+          <div class="crumb">Rewards</div><h3>Daily bonus is ready</h3>
+          <p>Collect your reward, then come back tomorrow for the next one.</p>
+          <div class="web-actions"><button class="web-btn ring">Claim reward</button><button class="web-btn sec">Later</button></div>
+        </div></div>
+      </div><div class="popup-anchor">${popup(
+          targetRow({label:"Claim reward", count:"128", countdown:"next in 0.7s", every:"3", paused:false}),
+          {running:true})}</div></div>`
+    },
+    3: {
+      capSide: "cap-left",
+      eyebrow: "Works on canvas & games",
+      h1: 'Aim any <span class="rainbow">pixel</span> in a game',
+      sub: "Idle game? Cookie clicker? Drop a rainbow crosshair on the exact spot and drag to fine-tune.",
+      art: () => `<div class="browser">${toolbar()}<div class="viewport">
+        <div class="game">
+          <div class="hud">2,471 cookies<small>+12 / sec</small></div>
+          <div class="cookie">
+            <div class="chip" style="left:60px;top:70px"></div>
+            <div class="chip" style="left:140px;top:60px"></div>
+            <div class="chip" style="left:90px;top:130px"></div>
+            <div class="chip" style="left:150px;top:150px"></div>
+            <div class="chip" style="left:50px;top:150px"></div>
+            <div class="crosshair">
+              <div class="pulse"></div><div class="hbar"></div><div class="vbar"></div>
+              <div class="tip">clicking here</div>
+            </div>
+          </div>
+        </div>
+      </div></div>`
+    },
+    4: {
+      capSide: "cap-right",
+      eyebrow: "Many at once",
+      h1: 'Run <span class="rainbow">several</span> targets together',
+      sub: "Each target clicks at its own rate. Pause, resume, or remove any one — the rest keep going.",
+      art: () => `<div class="browser">${toolbar()}<div class="viewport" style="background:linear-gradient(160deg,#241060,#120536)">
+        <div class="webpage" style="background:linear-gradient(160deg,#241060,#120536)"></div>
+      </div><div class="popup-anchor">${popup(
+          targetRow({label:"Big Cookie", count:"2,471", countdown:"next in 0.2s", every:"1", paused:false}) +
+          targetRow({label:"Buy upgrade", count:"312", countdown:"next in 3.4s", every:"5", paused:false}) +
+          targetRow({label:"Spin wheel", count:"45", countdown:"paused", every:"2", paused:true}),
+          {running:true})}</div></div>`
+    }
+  };
+
+  const s = SCENES[scene];
+  const stage = document.getElementById("stage");
+  const grid = document.createElement("div");
+  grid.className = "grid " + s.capSide;
+  grid.innerHTML = `
+    <div class="caption">
+      <div class="eyebrow"><span class="dot"></span>${s.eyebrow}</div>
+      <h1>${s.h1}</h1>
+      <p class="sub">${s.sub}</p>
+    </div>
+    <div class="art">${s.art()}</div>`;
+  stage.appendChild(grid);
+  document.title = "scene-" + scene + "-" + browser;
+</script>

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { By, Key, until } from "selenium-webdriver";
 import {
+  BROWSER,
   buildDriver,
   findTabIdByUrl,
   navigateTo,
@@ -27,17 +28,31 @@ async function closePopup() {
   await driver.switchTo().window(pageHandle);
 }
 
-async function loadFixturePage() {
+/**
+ * Wipe persisted state so each test starts clean. Settings now live in
+ * browser.storage.local (#14), which survives reloads — and survives into the
+ * next test if not cleared — so clear it from an extension page. Also clear the
+ * page's localStorage for older builds / leftovers.
+ */
+async function clearPersistedState() {
+  await driver.switchTo().newWindow("tab");
+  await navigateTo(driver, popupUrl(), By.id("select-element-btn"));
+  await driver.executeAsyncScript(
+    `const done = arguments[arguments.length - 1];
+     const api = window.browser || window.chrome;
+     Promise.resolve(api.storage.local.clear()).then(() => done(), () => done());`
+  );
+  await driver.close();
   await driver.switchTo().window(pageHandle);
-  // Drop any persisted state from a previous test so each starts clean. (#11
-  // makes the enabled flag and targets survive reloads — including into the
-  // next test if not cleared.) The try/catch covers the first run on
-  // about:blank, where localStorage isn't reachable.
   try {
     await driver.executeScript("localStorage.clear();");
   } catch (e) {
     // no page with localStorage yet
   }
+}
+
+async function loadFixturePage() {
+  await clearPersistedState();
   await navigateTo(driver, fixtureUrl("counter.html"), By.id("one"));
   await openPopup();
   if (tabId === undefined) {
@@ -143,7 +158,7 @@ afterAll(async () => {
   if (server) server.close();
 });
 
-describe("clickster in real Firefox", () => {
+describe(`clickster in ${BROWSER}`, () => {
   it("selects an element, clicks it, and stops", async () => {
     await loadFixturePage();
     await selectTargetByPointer("one");
@@ -272,6 +287,30 @@ describe("clickster in real Firefox", () => {
     await driver.wait(
       async () => (await readCount("count-one")) > baseline,
       6000
+    );
+  }, 90000);
+
+  it("clicks rapidly at a sub-second rate (#22)", async () => {
+    await loadFixturePage();
+    await selectTargetByPointer("one");
+
+    await openPopup();
+    await waitForRows(1);
+    const freq = await driver.findElement(By.css(".target .freq-input"));
+    // 0.1s => 10 CPS, far above the old 1-per-tick ceiling.
+    await driver.executeScript(
+      "arguments[0].value='0.1';" +
+        "arguments[0].dispatchEvent(new Event('change',{bubbles:true}));",
+      freq
+    );
+    await clickPopupButton("start-btn");
+    await closePopup();
+
+    // ~10 CPS: expect a clearly-fast climb within a couple of seconds.
+    await driver.wait(
+      async () => (await readCount("count-one")) >= 15,
+      4000,
+      "did not reach a high click rate"
     );
   }, 90000);
 
@@ -480,5 +519,62 @@ describe("clickster in real Firefox", () => {
       6000,
       "drag did not move the click point"
     );
+  }, 90000);
+
+  // Runs last: selecting inside the iframe leaves the top frame armed (the broad
+  // dev build has no worker to disarm it), which the next test's navigation
+  // clears.
+  it("selects and auto-clicks a target inside an iframe (#13)", async () => {
+    await clearPersistedState();
+    // Host page embeds counter.html in a same-origin iframe.
+    await navigateTo(driver, fixtureUrl("iframe-host.html"), By.id("frame"));
+
+    // waitForContentScript needs the WebExtension API, so run it from the popup.
+    await openPopup();
+    if (tabId === undefined) {
+      tabId = await findTabIdByUrl(driver, "iframe-host.html");
+    }
+    await waitForContentScript(driver, tabId); // top frame reachable
+    await closePopup();
+
+    // Arm selection — the popup broadcasts to every frame in the tab; it closes
+    // itself after arming.
+    await openPopup();
+    await (await armSelectionButton()).click();
+
+    // Pick #one from INSIDE the iframe. Retry the pointer click until the ring
+    // appears: the frame's content script may inject slightly after load, and
+    // point-dedup means repeat clicks don't add duplicate targets.
+    await driver.switchTo().window(pageHandle);
+    await driver.switchTo().frame(await driver.findElement(By.id("frame")));
+    const one = await driver.wait(until.elementLocated(By.id("one")), 5000);
+    await driver.wait(
+      async () => {
+        await driver.actions().move({ x: 5, y: 5 }).perform();
+        await driver.actions().move({ origin: one }).perform();
+        await driver.actions().click().perform();
+        const style = await driver
+          .findElement(By.id("one"))
+          .getAttribute("style");
+        return style.includes("rgb(184, 39, 252)");
+      },
+      8000,
+      "iframe target was not selected"
+    );
+    await driver.switchTo().defaultContent();
+
+    // Start, then confirm the in-frame counter advances.
+    await openPopup();
+    await clickPopupButton("start-btn");
+    await closePopup();
+
+    await driver.switchTo().window(pageHandle);
+    await driver.switchTo().frame(await driver.findElement(By.id("frame")));
+    await driver.wait(
+      async () => Number(await driver.findElement(By.id("count-one")).getText()) >= 2,
+      8000,
+      "clicking did not reach the iframe target"
+    );
+    await driver.switchTo().defaultContent();
   }, 90000);
 });

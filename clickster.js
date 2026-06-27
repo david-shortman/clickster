@@ -2,8 +2,68 @@ const isChrome = !window["browser"] && !!chrome;
 // Prefer the more standard `browser` before Chrome API
 const browser = isChrome ? chrome : window["browser"];
 
-const TICK_MS = 200;
+// The ticker runs often so sub-second rates are smooth; each tick dispatches
+// as many clicks as are due (catch-up), so the real rate isn't capped by the
+// tick cadence (#22).
+const TICK_MS = 25;
 const DEFAULT_INTERVAL_MS = 1000;
+// Don't run the per-click flash above ~6 CPS — at high rates the animation is
+// just layout thrash and caps throughput (#22).
+const FLASH_MIN_MS = 150;
+// Safety cap on catch-up clicks per tick (e.g. after a backgrounded tab), so a
+// large backlog can't fire as one huge burst.
+const MAX_CLICKS_PER_TICK = 50;
+
+// localStorage access throws in sandboxed iframes (course-ware SCORM players,
+// etc.), which would crash the whole content script on load now that it runs in
+// every frame (#13). Wrap it so those frames still function for the session,
+// just without persistence. Bracket access keeps the literal out of reach of
+// the global localStorage.* find/replace these helpers replaced.
+function lsGet(key) {
+  try {
+    return window["localStorage"].getItem(key);
+  } catch (e) {
+    return null;
+  }
+}
+function lsSet(key, value) {
+  try {
+    window["localStorage"].setItem(key, value);
+  } catch (e) {
+    // sandboxed/blocked storage — skip persistence in this frame
+  }
+}
+
+// Settings live in browser.storage.local (#14): the default rate is global so
+// it follows the user across sites, per-site state is keyed by origin, and —
+// unlike page localStorage — it works in storage-blocked/sandboxed frames and
+// never touches the host page's storage. localStorage is read only once, to
+// migrate legacy data.
+const DEFAULT_KEY = "defaultIntervalMs";
+const SITE_KEY = "site:" + location.origin;
+
+function storageGet(keys) {
+  try {
+    if (isChrome) {
+      return new Promise((resolve) =>
+        browser.storage.local.get(keys, (result) => resolve(result || {}))
+      );
+    }
+    return browser.storage.local.get(keys).catch(() => ({}));
+  } catch (e) {
+    return Promise.resolve({});
+  }
+}
+function storageSet(object) {
+  try {
+    if (isChrome) {
+      return new Promise((resolve) => browser.storage.local.set(object, resolve));
+    }
+    return browser.storage.local.set(object).catch(() => {});
+  } catch (e) {
+    return Promise.resolve();
+  }
+}
 
 // The selected highlight is a box-shadow ring rather than a border so it hugs
 // the element's own border-radius (border-image ignores border-radius) and
@@ -18,13 +78,19 @@ const PRESSED_SHADOW =
   "0 0 0 6px #fec837, 0 0 0 8px #fd1892";
 
 // Persisted so clicking survives the navigations and reloads it often triggers
-// (a click on a "next" button reloads the page). Restored on load below.
-let clicksterEnabled = localStorage.getItem("clicksterEnabled") === "true";
+// (a click on a "next" button reloads the page). Hydrated from storage in
+// init() below.
+let clicksterEnabled = false;
+let hideResumeToast = false;
 
 function setClicksterEnabled(enabled) {
   clicksterEnabled = enabled;
-  localStorage.setItem("clicksterEnabled", enabled ? "true" : "false");
+  persistSite();
 }
+
+// The rate to pre-fill for newly selected targets (#7): a global setting, so it
+// follows the user to new tabs and sites. Hydrated in init().
+let defaultIntervalMs = DEFAULT_INTERVAL_MS;
 
 // Each entry: { id, selector, label, ref, intervalMs, clickCount,
 //               lastClickedAt, paused, originalBorder, ... }
@@ -37,10 +103,24 @@ let clientX, clientY;
 const elementsThatWereDisabledOnPageLoad =
   document.body.querySelectorAll("*:disabled");
 
-let idCounter = 0;
+// Seed per-frame so target ids don't collide across iframes (#13): the popup
+// keys rows by id and control messages broadcast to every frame in the tab, so
+// two frames each starting at 1 would clash.
+let idCounter = Math.floor(Math.random() * 1e9);
 function getNextId() {
   idCounter += 1;
   return idCounter;
+}
+
+// Fire-and-forget message to the extension (background/popup); ignore the
+// "no receiver" rejection that happens when neither is listening.
+function notifyExtension(message) {
+  try {
+    const result = browser.runtime.sendMessage(message);
+    if (result && result.catch) result.catch(() => {});
+  } catch (e) {
+    // no receiving end
+  }
 }
 
 function removeHoverHighlight(element) {
@@ -140,6 +220,7 @@ function createMarker(target) {
     event.preventDefault();
     event.stopPropagation();
     draggingTarget = target;
+    activeCrosshair = target;
   });
   marker.appendChild(pulse);
   marker.appendChild(hbar);
@@ -153,6 +234,9 @@ function createMarker(target) {
 // While a crosshair handle is grabbed, move the point with the cursor and
 // recompute its offset within the anchor.
 let draggingTarget = null;
+// The crosshair point that arrow-key nudges move — the last one placed or
+// dragged (#33).
+let activeCrosshair = null;
 document.addEventListener("mousemove", (event) => {
   if (!draggingTarget || !draggingTarget.ref) return;
   const rect = draggingTarget.ref.getBoundingClientRect();
@@ -249,19 +333,26 @@ function labelFor(element) {
   return element.tagName ? element.tagName.toLowerCase() : "element";
 }
 
+// Write this origin's state (enabled flag, targets, toast preference) under its
+// per-origin key. Named persistTargets for its many callers; it saves the whole
+// site record.
 function persistTargets() {
-  localStorage.setItem(
-    "clicksterTargets",
-    JSON.stringify(
-      targets.map((t) => ({
+  persistSite();
+}
+function persistSite() {
+  storageSet({
+    [SITE_KEY]: {
+      enabled: clicksterEnabled,
+      hideResumeToast: hideResumeToast,
+      targets: targets.map((t) => ({
         selector: t.selector,
         intervalMs: t.intervalMs,
         paused: t.paused,
         offsetX: t.offsetX,
         offsetY: t.offsetY,
-      }))
-    )
-  );
+      })),
+    },
+  });
 }
 
 function clamp01(value) {
@@ -314,7 +405,7 @@ function addTarget(element, options) {
     selector: options.selector || cssPathFor(element),
     label: labelFor(element),
     ref: element,
-    intervalMs: options.intervalMs || DEFAULT_INTERVAL_MS,
+    intervalMs: options.intervalMs || defaultIntervalMs,
     clickCount: 0,
     lastClickedAt: Date.now(),
     paused: !!options.paused,
@@ -326,12 +417,14 @@ function addTarget(element, options) {
   };
   targets.push(target);
   displayAsSelected(target);
+  if (target.crosshair) activeCrosshair = target;
 }
 
 function removeTarget(id) {
   const index = targets.findIndex((t) => t.id === id);
   if (index === -1) return;
   const [removed] = targets.splice(index, 1);
+  if (removed === activeCrosshair) activeCrosshair = null;
   restoreHighlight(removed);
   persistTargets();
   if (targets.length === 0) {
@@ -347,6 +440,15 @@ function setTargetInterval(id, seconds) {
   if (!isFinite(value) || value <= 0) return;
   target.intervalMs = value * 1000;
   persistTargets();
+}
+
+// The default rate applied to newly selected targets, set from the popup's
+// settings and remembered across reloads (#7).
+function setDefaultInterval(seconds) {
+  const value = Number(seconds);
+  if (!isFinite(value) || value <= 0) return;
+  defaultIntervalMs = value * 1000;
+  storageSet({ [DEFAULT_KEY]: defaultIntervalMs });
 }
 
 function setTargetPaused(id, paused) {
@@ -431,16 +533,12 @@ function resolveTarget(target) {
   return found;
 }
 
-// Click via real coordinate-bearing events at (clientX, clientY) — not
-// element.click() — so it works for canvas/coordinate games and for sites that
-// ignore synthetic clicks. Dispatches on whatever element is actually at the
-// point. Events are isTrusted:false (not an anti-cheat bypass).
-function dispatchClickAt(clientX, clientY, anchor) {
-  const target = document.elementFromPoint(clientX, clientY);
+// Dispatch a full real click (pointer + mouse sequence) on `target` at the
+// given viewport coordinates — not element.click() — so it works for
+// canvas/coordinate games and for sites that ignore synthetic clicks. Events
+// are isTrusted:false (not an anti-cheat bypass).
+function dispatchClickSequence(target, clientX, clientY) {
   if (!target || typeof target.dispatchEvent !== "function") return false;
-  // Skip if the anchor isn't actually at this point — scrolled off-screen, or
-  // hidden behind a modal/overlay — so we never click the wrong element.
-  if (anchor && anchor !== target && !anchor.contains(target)) return false;
   const base = {
     bubbles: true,
     cancelable: true,
@@ -467,6 +565,29 @@ function dispatchClickAt(clientX, clientY, anchor) {
   return true;
 }
 
+// Click whatever element is actually at (clientX, clientY). Returns false when
+// the anchor isn't the element at that point — i.e. it's hidden behind a
+// modal/overlay — so we never click the wrong element.
+function dispatchClickAt(clientX, clientY, anchor) {
+  const target = document.elementFromPoint(clientX, clientY);
+  if (!target) return false;
+  if (anchor && anchor !== target && !anchor.contains(target)) return false;
+  return dispatchClickSequence(target, clientX, clientY);
+}
+
+function pointInViewport(x, y) {
+  return x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight;
+}
+
+// Dispatch one click for a target at its current point. Crosshair (canvas)
+// points and visible elements hit-test the point (so overlays skip); an element
+// scrolled out of view is clicked directly so auto-clicking keeps going.
+function clickTargetOnce(target, ref, x, y) {
+  if (target.crosshair) return dispatchClickAt(x, y, ref);
+  if (pointInViewport(x, y)) return dispatchClickAt(x, y, ref);
+  return dispatchClickSequence(ref, x, y);
+}
+
 function tick() {
   if (!clicksterEnabled) return;
   const now = Date.now();
@@ -482,14 +603,30 @@ function tick() {
       target.markerEl.style.left = x + "px";
       target.markerEl.style.top = y + "px";
     }
-    if (now - target.lastClickedAt >= target.intervalMs) {
-      // Only count it if the click actually reached the target; otherwise
-      // (off-screen / occluded) leave it due and retry next tick.
-      if (dispatchClickAt(x, y, ref)) {
-        target.clickCount += 1;
-        target.lastClickedAt = now;
-        pulseClicked(target);
-      }
+
+    // Catch-up: fire every click due since the last tick, so sub-second rates
+    // aren't throttled to the tick cadence (#22).
+    let fired = 0;
+    while (
+      now - target.lastClickedAt >= target.intervalMs &&
+      fired < MAX_CLICKS_PER_TICK
+    ) {
+      // Off-screen/occluded: leave it due and retry next tick.
+      if (!clickTargetOnce(target, ref, x, y)) break;
+      target.clickCount += 1;
+      target.lastClickedAt += target.intervalMs;
+      fired += 1;
+    }
+    // If a backlog remains after the cap, drop it so it doesn't burst later.
+    if (
+      fired === MAX_CLICKS_PER_TICK &&
+      now - target.lastClickedAt >= target.intervalMs
+    ) {
+      target.lastClickedAt = now;
+    }
+    // One flash per tick, and only at human-visible rates.
+    if (fired > 0 && target.intervalMs >= FLASH_MIN_MS) {
+      pulseClicked(target);
     }
   });
 }
@@ -524,14 +661,23 @@ function enableSelectionMode() {
   });
 }
 
-function setSelectedElement(event) {
-  if (!shouldNextClickSelectAnElement) return;
-  event.preventDefault();
-
+// Leave selection mode: restore disabled elements, clear the hover border, and
+// resume clicking. Shared by an actual selection and by a sibling-frame disarm.
+function disableSelectionMode() {
+  if (!isSelectionModeEnabled) return;
   elementsThatWereDisabledOnPageLoad.forEach((elem) => {
     elem.disabled = true;
   });
   removeHoverHighlight(lastHoveredElement);
+  lastHoveredElement = null;
+  isSelectionModeEnabled = false;
+  shouldNextClickSelectAnElement = false;
+  startClicking();
+}
+
+function setSelectedElement(event) {
+  if (!shouldNextClickSelectAnElement) return;
+  event.preventDefault();
 
   // Additive: each selection adds a target to the list (removed individually
   // from the popup), rather than replacing the previous one. The point the user
@@ -541,15 +687,55 @@ function setSelectedElement(event) {
   });
   persistTargets();
 
-  isSelectionModeEnabled = false;
-  shouldNextClickSelectAnElement = false;
-  startClicking();
+  disableSelectionMode();
+  // The popup armed every frame in the tab; now that this one has the target,
+  // tell the worker to disarm the others so a later click elsewhere doesn't
+  // start an unintended selection (#13).
+  notifyExtension({ clicksterDisarmOthers: true });
 }
 
 document.addEventListener("keyup", (event) => {
   if (event.key === "Enter") {
     setSelectedElement(event);
   }
+});
+
+// Arrow keys nudge the active crosshair point for precise placement (#33):
+// 1px, or 10px with Shift. Only while clicking is stopped, and not when typing.
+const NUDGE_DELTAS = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
+document.addEventListener("keydown", (event) => {
+  if (clicksterEnabled || isSelectionModeEnabled) return;
+  const delta = NUDGE_DELTAS[event.key];
+  if (!delta) return;
+  if (!activeCrosshair || !activeCrosshair.ref || !activeCrosshair.ref.isConnected) {
+    return;
+  }
+  const node = event.target;
+  if (
+    node &&
+    (node.tagName === "INPUT" ||
+      node.tagName === "TEXTAREA" ||
+      node.isContentEditable)
+  ) {
+    return;
+  }
+  const rect = activeCrosshair.ref.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const step = event.shiftKey ? 10 : 1;
+  activeCrosshair.offsetX = clamp01(
+    activeCrosshair.offsetX + (delta[0] * step) / rect.width
+  );
+  activeCrosshair.offsetY = clamp01(
+    activeCrosshair.offsetY + (delta[1] * step) / rect.height
+  );
+  positionMarker(activeCrosshair);
+  persistTargets();
+  event.preventDefault();
 });
 document.addEventListener("click", (event) => {
   setSelectedElement(event);
@@ -560,6 +746,7 @@ function sendState() {
   browser.runtime.sendMessage({
     clicksterState: {
       enabled: clicksterEnabled,
+      defaultIntervalSeconds: defaultIntervalMs / 1000,
       targets: targets.map((t) => ({
         id: t.id,
         label: t.label,
@@ -587,7 +774,7 @@ function dismissResumeToast() {
 // so it's never a mystery why a page is clicking itself. Stays until the user
 // acts (it is not auto-dismissed).
 function showResumeToast() {
-  if (localStorage.getItem("clicksterHideResumeToast") === "true") return;
+  if (hideResumeToast) return;
   if (!document.body || document.getElementById("clickster-resume-toast")) {
     return;
   }
@@ -634,7 +821,8 @@ function showResumeToast() {
     "color:#9189c0;font-size:12px;margin-left:auto;text-decoration:underline;cursor:pointer";
   hideLink.addEventListener("click", (event) => {
     event.preventDefault();
-    localStorage.setItem("clicksterHideResumeToast", "true");
+    hideResumeToast = true;
+    persistSite();
     dismissResumeToast();
   });
 
@@ -646,26 +834,17 @@ function showResumeToast() {
   document.body.appendChild(toast);
 }
 
-// Re-resolve persisted target selectors after a page load and resume clicking
-// if it was running. This is what makes clicking survive a reload (issue #11).
-function restoreTargets() {
-  let stored = [];
-  const raw = localStorage.getItem("clicksterTargets");
-  if (raw) {
-    try {
-      stored = JSON.parse(raw);
-    } catch (e) {
-      stored = [];
-    }
-  }
-  stored.forEach((entry) => {
+// Re-resolve persisted target selectors against this page and add them back.
+// This is what makes clicking survive a reload (issue #11).
+function restoreTargetsFrom(stored) {
+  (stored || []).forEach((entry) => {
     // Tolerate the older format, which stored bare selector strings.
     const selector = typeof entry === "string" ? entry : entry.selector;
     if (!selector) return;
     const intervalMs =
       typeof entry === "object" && entry.intervalMs
         ? entry.intervalMs
-        : DEFAULT_INTERVAL_MS;
+        : defaultIntervalMs;
     const paused = typeof entry === "object" ? !!entry.paused : false;
     const offsetX = typeof entry === "object" ? entry.offsetX : undefined;
     const offsetY = typeof entry === "object" ? entry.offsetY : undefined;
@@ -677,21 +856,56 @@ function restoreTargets() {
       // Ignore selectors that no longer parse or match on this page.
     }
   });
-  // Fall back to the older query-only state so existing users keep their target.
-  if (targets.length === 0) {
-    const cachedQuery = localStorage.getItem("clicksterQuery");
-    if (cachedQuery) {
-      cachedQuery.split("\n").forEach((selector) => {
-        try {
-          document.body.querySelectorAll(selector).forEach((element) => {
-            addTarget(element, { selector });
-          });
-        } catch (e) {
-          // ignore
-        }
-      });
+}
+
+// Read legacy page-localStorage state (pre-#14 installs), to migrate once.
+function legacySiteState() {
+  let legacyTargets = [];
+  const raw = lsGet("clicksterTargets");
+  if (raw) {
+    try {
+      legacyTargets = JSON.parse(raw);
+    } catch (e) {
+      legacyTargets = [];
     }
   }
+  if (legacyTargets.length === 0) {
+    const cachedQuery = lsGet("clicksterQuery");
+    if (cachedQuery) {
+      legacyTargets = cachedQuery.split("\n").filter(Boolean);
+    }
+  }
+  return {
+    enabled: lsGet("clicksterEnabled") === "true",
+    hideResumeToast: lsGet("clicksterHideResumeToast") === "true",
+    targets: legacyTargets,
+  };
+}
+
+// Hydrate settings from storage.local (migrating legacy localStorage on first
+// run), restore this page's targets, and resume clicking if it was running.
+async function init() {
+  const data = await storageGet([DEFAULT_KEY, SITE_KEY]);
+
+  defaultIntervalMs =
+    Number(data[DEFAULT_KEY]) ||
+    Number(lsGet("clicksterDefaultIntervalMs")) ||
+    DEFAULT_INTERVAL_MS;
+
+  let site = data[SITE_KEY];
+  const migrated = !site;
+  if (migrated) {
+    site = legacySiteState();
+  }
+
+  clicksterEnabled = !!site.enabled;
+  hideResumeToast = !!site.hideResumeToast;
+  restoreTargetsFrom(site.targets);
+
+  // Persist the global default and, on first run, the migrated site record.
+  storageSet({ [DEFAULT_KEY]: defaultIntervalMs });
+  if (migrated) persistSite();
+
   if (targets.length > 0) {
     startClicking();
     if (clicksterEnabled) {
@@ -700,11 +914,18 @@ function restoreTargets() {
   }
 }
 
-browser.runtime.onMessage.addListener(function (message) {
-  if (message === "GET_STATE") {
+browser.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+  if (message === "PING") {
+    // Reachability probe (the background worker uses it to avoid injecting a
+    // second copy of this script into a tab that already has one).
+    if (sendResponse) sendResponse(true);
+  } else if (message === "GET_STATE") {
     sendState();
   } else if (message === "SELECT_ELEMENT_CLICKED") {
     enableSelectionMode();
+  } else if (message === "STOP_SELECTION_MODE") {
+    // Another frame in this tab completed the selection — disarm this one.
+    disableSelectionMode();
   } else if (message === "START_CLICKING") {
     setClicksterEnabled(true);
     const now = Date.now();
@@ -724,6 +945,8 @@ browser.runtime.onMessage.addListener(function (message) {
       message.setTargetInterval.id,
       message.setTargetInterval.seconds
     );
+  } else if (message && message.setDefaultInterval) {
+    setDefaultInterval(message.setDefaultInterval.seconds);
   } else if (message && message.pauseTarget) {
     setTargetPaused(message.pauseTarget.id, message.pauseTarget.paused);
   } else if (message && message.showTargetId !== undefined) {
@@ -731,4 +954,4 @@ browser.runtime.onMessage.addListener(function (message) {
   }
 });
 
-restoreTargets();
+init();
